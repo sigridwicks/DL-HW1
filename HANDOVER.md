@@ -1,6 +1,6 @@
 # HANDOVER — AIR5011 / MDS5122 Assignment 1 · Task A
 
-> 2026-10-18 更新（**实验全部结束，交接给报告阶段**）。历史细节见记忆文件与 `runs/`，本文件只留当前必要的。
+> 2026-10-18 更新（**实验全部结束，交接给报告阶段**）。历史细节见记忆文件与 `task_a/runs/`，本文件只留当前必要的。
 > **截止 2026-10-21（剩 3 天）；报告尚未动笔 —— 这是唯一的剩余大块工作。**
 > 面向接手此项目的下一个 agent 会话。与用户沟通用**中文**；指代 cell 一律用 **`code #N`（只看代码格、从 1 数）**。
 
@@ -27,18 +27,18 @@
 | 解释器 | `.venv\Scripts\python.exe`（3.11.14）；torch 2.11.0+cu128 / torchvision 0.26.0+cu128 |
 | 硬件 | RTX 4060 Laptop 8GB；**快态**下 cnn_down@45k ≈ 25 s/epoch、cnn_wide ≈ 26、20.7M 模型 ≈ 60 |
 | 数据 | `data/cifar-100-python/`（hf-mirror 下载，md5 `eb9058c3a382ffc7106e4002c42a8d85` 已校验） |
-| Notebook | `02_main_exps_1.ipynb`（第一批 exp_101–109）/ `02_main_exps_2.ipynb`（第二批 exp_2xx，**code #1–#11**）/ `03_final_analysis.ipynb`（**唯一出主表处**，扫 `runs/`）/ `04_report_assets.ipynb`（报告图：benchmark、消融图、混淆矩阵、错误样例） |
-| 数据与产物 | **`runs/<name>/`**（45k/5k：config + metrics + curves + model.pt）、**`runs_final/`**（50k→test、错误分析）、**`figs/`**（报告插图）。**不要凭记忆报数字** |
+| Notebook | `02_main_exps_1.ipynb`（第一批 exp_101–109）/ `02_main_exps_2.ipynb`（第二批 exp_2xx，**code #1–#11**）/ `03_final_analysis.ipynb`（**唯一出主表处**，扫 `task_a/runs/`）/ `04_report_assets.ipynb`（报告图：benchmark、消融图、混淆矩阵、错误样例） |
+| 数据与产物 | **`task_a/runs/<name>/`**（45k/5k：config + metrics + curves + model.pt）、**`task_a/runs_final/`**（50k→test、错误分析）、**`figs/`**（报告插图）。**不要凭记忆报数字** |
 | 外部参考 | 另一个 AI 的方案文档（`CIFAR100最佳模型查询_Export_*.md`）**已被用户删除**；其中不能照抄的结论留档在 §3.4 |
 
-## 1. 代码骨架 `src/`
+## 1. 代码骨架 `task_a/src/`
 
 - `config.py`：路径 / SEED=42 / CIFAR100 mean+std。
 - `data.py`：`build_loaders_val(batch, num_workers, train_tf)` → (train45k, val5k, test10k)；split 用独立 Generator（不动全局 RNG）；num_workers>0 自动开 `persistent_workers`。
 - `models.py`：题目 baseline 三兄弟 + `cnn_down` + **`cnn_down_variant()` 工厂**（widths / strides / convs_per_stage / residual / dw_sep / norm 六个旋钮，**不传参 = `cnn_down` 本身**）+ 12 个 wrapper：`cnn_residual` `cnn_wide`(9.36M) `cnn_deep` `cnn_3stage` `cnn_dw` `cnn_dw_wide` `cnn_groupnorm` `cnn_deep_residual`(5.19M) `cnn_deep_residual_wide`(20.7M) **`cnn_deep_residual_d3`(7.93M) `cnn_deep_residual_d4`(10.66M) `cnn_wide3`(21.0M)** ← 后三个是容量阶梯。
 - `engine.py`：`fit(..., ema_decay=None)`（scheduler 按 epoch step）；**EMA 钩子**（`_EMA`）：给了 `ema_decay` 就每 step 更新影子权重、每 epoch 用 EMA 权重多评估一次，结果进 `history["ema_test_acc"]`，**不改训练也不改 model.pt**；`evaluate`（top-1）；**`evaluate_topk`**（top-1 + top-5）；**`ensemble_eval(models, loader, device, tta=False)`**（概率平均，可做 TTA / 3-seed 集成 / 两者叠加）。
 - `data.py`：`build_loaders_val`（45k/5k 协议）+ **`build_train_test_loaders`**（**50k 全量 train + 10k test + 2k monitor**，S5 最终重训专用）。
-- `experiments.py`：`run_experiment` / `run_batch(..., skip_existing=True)`（断点续跑）/ `build_experiment_metadata()`（**产出的 config 字段名是主表契约，勿改**；`run_extra` 是它的旧别名）/ **`run_final_retrain`**（50k 全量重训 → test 只测一次，产物写 **`runs_final/`**，不混进 `runs/`）。**`run_experiment` / `run_batch` 的 `ema_decay` 默认 0.999**（= 从现在起所有新 run 都记 EMA 曲线；单项写 `"ema_decay": None` 关掉）。
+- `experiments.py`：`run_experiment` / `run_batch(..., skip_existing=True)`（断点续跑）/ `build_experiment_metadata()`（**产出的 config 字段名是主表契约，勿改**；`run_extra` 是它的旧别名）/ **`run_final_retrain`**（50k 全量重训 → test 只测一次，产物写 **`task_a/runs_final/`**，不混进 `task_a/runs/`）。**`run_experiment` / `run_batch` 的 `ema_decay` 默认 0.999**（= 从现在起所有新 run 都记 EMA 曲线；单项写 `"ema_decay": None` 关掉）。
 - `utils.py`：`set_seed` / `save_run`（四件套；有 EMA 时 metrics.csv 多两列 `ema_test_loss`/`ema_test_acc`，curves.png 多一条虚线 —— **老 run 仍是 6 列，读表按列名取，别按下标**）/ `check_gpu`（15 s 自检）/ `warmup_cosine`。
 
 ## 2. 已有结果
@@ -110,7 +110,7 @@
 - **评估侧（val5k，非 test）**：216 单模型 top5 = 92.98；单模型 TTA 74.84 / 93.22；**3-seed 集成 76.26 / 93.80**；集成 + TTA **76.34 / 94.08**。
 - ⚠️ **归因更正**：exp_221 的 8.9 s/epoch vs S1 那批 23.8 s，是 **NUM_WORKERS 0 → 2** 的差别，**不是 GPU 慢态**（8.9 s ≈ 纯 GPU 下限 22.6 ms/batch × 351）。S1 screen 批（17:34–19:03）跑在 nw=0 上，20:39 之后的 confirm 批起才是 nw=2。数值不受影响，但报告工程段应写"2.6× 提速在 run 日志里直接可见"。
 
-### 2.5 ★ 最终交付：50k 全量重训（exp_230，2026-10-17，`runs_final/`）
+### 2.5 ★ 最终交付：50k 全量重训（exp_230，2026-10-17，`task_a/runs_final/`）
 
 冠军配方 `dr_wide` + crop+flip + 60 ep，训练集 45k→**50k 全量**（5k val 并入），**test10k 只在训练结束后测**。3 seeds、每 seed 60 ep、66–67 s/epoch，总墙钟 2 h 15 min。
 
@@ -172,7 +172,7 @@
 7. **编号**：一个 `exp` = 一个配置，`_s<seed>` 区分种子；第一批占用 exp_101–109，第二批用 **exp_2xx**。
 8. **GPU 纪律**：长跑前确认性能模式 + 自检；**未经用户同意不停正在跑的训练**。
 9. **编辑器 clobber 坑**：程序化改完任何 `.ipynb` 后必须让用户 **Reload/Revert** 再运行，否则其保存会覆盖磁盘修改（已发生过）。配套坑：换内核或改过 import 后**必须先重跑 code #1**，否则 `NameError`。
-10. **不要往实验 cell 里塞跨格依赖**：批次 cell 只允许依赖 **code #1 + code #2**；公共 helper 一律放 `src/`（已因此踩过 `NameError`）。
+10. **不要往实验 cell 里塞跨格依赖**：批次 cell 只允许依赖 **code #1 + code #2**；公共 helper 一律放 `task_a/src/`（已因此踩过 `NameError`）。
 11. 沟通用中文；用户在本项目里**要求 agent 直接写代码 / 写 notebook**（覆盖其早先"自己写"的旧偏好，以即时指令为准）；偏好 ADHD 友好的输出（结论前置、编号步骤、动作先行）。
 
 ## 5. 剩余工作（实验已全部完成，不要再开新实验）
@@ -184,7 +184,7 @@
 | P2（可选） | S3 正则线 | AdamW wd=5e-2（exp_222）/ label smoothing（223）/ Dropout（224），都跑在冠军 20.7M 上 → **~3 h/项**（60ep × 3 seeds）。**Cutout 只有 +0.6，正则化边际收益小 —— 时间不够就整段跳过，不影响已有结论** |
 | P3（可选） | SGD 对照（exp_225） | 任务书因素 4 的完整对照，需重扫 lr；冠军规模下 1 seed × 2 个 lr 点 ≈ **2 h**。**报告里已有 10ep 的 SGD vs Adam（exp_101 vs 102），不做也不算缺项** |
 
-**已完成**：S0（108/109）→ S1（200–208）→ S1b（202 复核）→ S1c（208 复核）→ S2 过夜批（211–220）→ S2c（221 锚点）→ S4a（top-5 回填）→ S4b（TTA/集成）→ S5（50k 重训）→ S6（报告图）。产物在 `runs/`、`runs_final/`、`figs/`。
+**已完成**：S0（108/109）→ S1（200–208）→ S1b（202 复核）→ S1c（208 复核）→ S2 过夜批（211–220）→ S2c（221 锚点）→ S4a（top-5 回填）→ S4b（TTA/集成）→ S5（50k 重训）→ S6（报告图）。产物在 `task_a/runs/`、`task_a/runs_final/`、`figs/`。
 
 **编号备忘**：60ep 锚点 = 221；S3 正则 = 222/223/224；SGD = 225；epoch 阶梯取消（60ep 曲线本身就是阶梯）。
 
@@ -192,7 +192,7 @@
 
 | # | 事项 | 状态 |
 |---|---|---|
-| 1 | **top-5** | ✅ 已接入（`evaluate_topk`）；全部 74 run 回填在 `runs/topk_summary.csv`，最终模型 test top-5 = **94.36** |
+| 1 | **top-5** | ✅ 已接入（`evaluate_topk`）；全部 74 run 回填在 `task_a/runs/topk_summary.csv`，最终模型 test top-5 = **94.36** |
 | 2 | 过拟合起点 | ✅ 由 S2 的 211/213 曲线给出（ep34/ep43 见顶，见 §2.3） |
 | 3 | CPU vs GPU benchmark | ✅ 已做（§2.6：7.0×） |
 | 4 | notebook 从头 Execute All 能跑通 | 提交前必查（任务书标"极其重要"，本项目有 clobber 前科） |
@@ -205,31 +205,31 @@
 ## 7. 新会话必看
 
 1. **记忆系统**：同项目新会话自动加载 `MEMORY.md` —— 先读 `dl-hw1-phase3-progress` 对齐进度；另有 `dl-hw1-collapse-seed-lottery`、`dl-hw1-gpu-slow-state`、`dl-hw1-machine-setup`、`cifar-download-fast-mirror`、`dl-hw1-taskb-layout`。**注意**：别的 agent（Codex/GPT）直接改 notebook 会把中文变成 `?`（2026-10-16 发生过）→ 用 `~/.claude/file-history` 的字节级快照恢复，见记忆 `dl-hw1-encoding-corruption-recovery`。
-2. **权威数据 = `runs/`**（45k/5k 协议，主表在 `03_final_analysis.ipynb` 生成）+ **`runs_final/`**（50k 全量重训、test10k；**不要混进主表**）+ **`figs/`**（报告插图，由 `04_report_assets.ipynb` 生成）。`runs/topk_summary.csv` 是 S4a 回填的 top-1/top-5。
-3. **不要动**：`.venv` 的 torch（训练中尤其）、`baseline_cnn()` 本身、`runs/exp_002_adam_45k`（坍缩证据）、LEGACY 排除清单。
+2. **权威数据 = `task_a/runs/`**（45k/5k 协议，主表在 `03_final_analysis.ipynb` 生成）+ **`task_a/runs_final/`**（50k 全量重训、test10k；**不要混进主表**）+ **`figs/`**（报告插图，由 `04_report_assets.ipynb` 生成）。`task_a/runs/topk_summary.csv` 是 S4a 回填的 top-1/top-5。
+3. **不要动**：`.venv` 的 torch（训练中尤其）、`baseline_cnn()` 本身、`task_a/runs/exp_002_adam_45k`（坍缩证据）、LEGACY 排除清单。
 4. **冠军**（截至 2026-10-17）：**`dr_wide`（20.7M）+ Adam 1e-3 + warmup/cosine + crop+flip + 60ep**。45k/5k val = 74.13（3 seeds）；**50k 重训 test = 75.01 单模型 / 77.87 集成+TTA（top-5 94.36）**。20 ep 口径最优 exp_202 = 70.40，10 ep 口径 exp_107 = 61.00 —— **三个预算是三个区块，数字不可混表**。
-5. 任务书细节（验收 checklist / 规则 / 因素清单 / 报告要求）全在 `TaskA_任务书.md` —— 动手前先通读相关章节。项目协作约定在 **`agent.md`**（cell 依赖规则、`src/` 职责、UTF-8 等）；它不叫 CLAUDE.md，**不会被自动加载，要主动读**。
+5. 任务书细节（验收 checklist / 规则 / 因素清单 / 报告要求）全在 `TaskA_任务书.md` —— 动手前先通读相关章节。项目协作约定在 **`agent.md`**（cell 依赖规则、`task_a/src/` 职责、UTF-8 等）；它不叫 CLAUDE.md，**不会被自动加载，要主动读**。
 
 ## 8. 提交清单（任务书 4.4）
 
 **交付物**
 - **PDF 报告单独上传 —— 用英文写**（任务书明确要求；沟通用中文不等于报告用中文）
 - **代码 zip 单独上传**，里面**不要**放报告
-- zip 内容：`src/` + `notebooks/`（00/01/02_main_exps_1/02_main_exps_2/03/04）+ `agent.md`/`HANDOVER.md`（可选）
-- **不要打包**：`data/`、任何 `*.pt`（`runs/` 约 2.4 GB、`runs_final/` 约 250 MB，绝大部分是权重）
-- 建议打包：`runs/*/config.json` + `metrics.csv`（体积小、是"每个数字的出处"）
+- zip 内容：`task_a/src/` + `task_a/notebooks/`（00/01/02_main_exps_1/02_main_exps_2/03/04）+ `agent.md`/`HANDOVER.md`（可选）
+- **不要打包**：`data/`、任何 `*.pt`（`task_a/runs/` 约 2.4 GB、`task_a/runs_final/` 约 250 MB，绝大部分是权重）
+- 建议打包：`task_a/runs/*/config.json` + `metrics.csv`（体积小、是"每个数字的出处"）
 
 **提交前检查**
 - [ ] 每个 notebook 从头 **Execute All** 能跑通（任务书标"极其重要"；长训练 cell 要加开关或排除）
-- [ ] notebook 无 error 输出残留：`grep -c '"output_type": "error"' notebooks/*.ipynb`
-- [ ] 主表由 `03_final_analysis.ipynb` 生成，数字与 `runs/` 一致
-- [ ] 报告里每个数字都能在 `runs/` 或 `runs_final/` 找到出处
+- [ ] notebook 无 error 输出残留：`grep -c '"output_type": "error"' task_a/notebooks/*.ipynb`
+- [ ] 主表由 `03_final_analysis.ipynb` 生成，数字与 `task_a/runs/` 一致
+- [ ] 报告里每个数字都能在 `task_a/runs/` 或 `task_a/runs_final/` 找到出处
 - [ ] 报告 §6 用**最终 test 数字**（77.87 / 94.36），不要把 val 当 test
 - [ ] 图的 `dpi ≥ 150`、坐标轴有 label、图例齐全、**黑白打印也能区分线型**
 - [ ] 所有超参用表格、实验对比"表格 + 图"双重呈现、图表编号并在正文引用
 - [ ] 混淆矩阵按**超类**聚合观察（任务书提示：CIFAR-100 的错误大量发生在同一超类内部）
 
-**报告里必须各自成节的素材（已就绪）**：CPU vs GPU 表（§2.6）· 数据统计与增强可视化（00_eda）· 训练曲线（runs/*/curves.png）· 消融表 + 柱状图（§2.3/2.4）· 混淆矩阵/per-class/错误样例（§2.6）· "What I learned"（§3 的七条机制）。
+**报告里必须各自成节的素材（已就绪）**：CPU vs GPU 表（§2.6）· 数据统计与增强可视化（00_eda）· 训练曲线（task_a/runs/*/curves.png）· 消融表 + 柱状图（§2.3/2.4）· 混淆矩阵/per-class/错误样例（§2.6）· "What I learned"（§3 的七条机制）。
 
 ## 9. 报告写作地图（任务书 4.1 的结构 → 材料出处）
 
@@ -237,16 +237,16 @@
 |---|---|---|
 | 1. Introduction | 任务、数据、目标 | `Assignment_1.pdf`；`TaskA_任务书.md` §0 |
 | 2. Environment Setup | 硬件、torch 版本、**CPU vs GPU 表**、AMP 对比 | §0 速览；§2.6（7.0×、1.89×/−518 MB） |
-| 3. Dataset & Preprocessing | CIFAR-100 统计量、45k/5k/10k split、增强可视化 | `notebooks/00_eda.ipynb`；§3.4 的增强坑（别用 RandomResizedCrop 默认参数、别垂直翻转） |
-| 4. Baseline | 题目架构（4,961,124 参）、10 ep、SGD 1e-2、top-1/top-5 | §2.1（exp_000/101）；`runs/exp_101_*/`；curves.png |
-| 5. Experiments（20 分主战场） | 方法论 + 每个因素"动机→配置→结果→结论" | **§3 的七条机制是叙事骨架**；数字见 §2.2/2.3/2.4；图 `figs/fig_ablation_60ep.png`、`figs/fig_capacity_scaling.png`；主表由 `03_final_analysis.ipynb` 生成，top-5 在 `runs/topk_summary.csv` |
+| 3. Dataset & Preprocessing | CIFAR-100 统计量、45k/5k/10k split、增强可视化 | `task_a/notebooks/00_eda.ipynb`；§3.4 的增强坑（别用 RandomResizedCrop 默认参数、别垂直翻转） |
+| 4. Baseline | 题目架构（4,961,124 参）、10 ep、SGD 1e-2、top-1/top-5 | §2.1（exp_000/101）；`task_a/runs/exp_101_*/`；curves.png |
+| 5. Experiments（20 分主战场） | 方法论 + 每个因素"动机→配置→结果→结论" | **§3 的七条机制是叙事骨架**；数字见 §2.2/2.3/2.4；图 `figs/fig_ablation_60ep.png`、`figs/fig_capacity_scaling.png`；主表由 `03_final_analysis.ipynb` 生成，top-5 在 `task_a/runs/topk_summary.csv` |
 | 5.k Ablation summary | 主实验表 + 柱状图 | 同上；**三个预算区块（10/20/60 ep）不可混表**；45k 与 50k 也不可混 |
-| 6. Final Model & Error Analysis | 最终配置、test 表、混淆矩阵、per-class、错误样例 | §2.5（test 表）+ §2.6；`figs/fig_confusion_fine.png`、`fig_confusion_coarse.png`、`fig_per_class.png`、`fig_error_samples.png`；`runs_final/per_class_acc.csv` |
+| 6. Final Model & Error Analysis | 最终配置、test 表、混淆矩阵、per-class、错误样例 | §2.5（test 表）+ §2.6；`figs/fig_confusion_fine.png`、`fig_confusion_coarse.png`、`fig_per_class.png`、`fig_error_samples.png`；`task_a/runs_final/per_class_acc.csv` |
 | 7. What I Learned | 3–5 个具体、带证据的认知转变 | §3 的 1/2/3/5/7 条：坍缩与 BN、aug 的预算依赖、噪声底 1 pt、EMA 的真实作用、单进程取数 |
 | 8. References | BN / ResNet / Adam / cosine / EMA / TTA 等原论文 | 用户自己补 |
 
 **写作纪律（评分点）**
-- 报告里**每个数字**都要能指到 `runs/` 或 `runs_final/` 的文件；不要凭记忆。
+- 报告里**每个数字**都要能指到 `task_a/runs/` 或 `task_a/runs_final/` 的文件；不要凭记忆。
 - 负结果照写（深度单独、depthwise、GroupNorm、Cutout 在噪声内）—— 任务书明确说负结果和失败分析是最好的证据。
 - **test 数字只能出现在 §6**（最终模型）；§5 的所有对比都用 45k/5k val，并注明是验证集。
 - 图的 `dpi ≥ 150`、有坐标轴 label / 图例、**黑白打印可区分**（现有图已用实线/虚线 + 不同 marker）。

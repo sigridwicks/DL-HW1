@@ -20,7 +20,7 @@ TASKB_ROOT = pathlib.Path(__file__).resolve().parent
 DATA_DIR = TASKB_ROOT.parent / 'data'
 RUNS_DIR = TASKB_ROOT / 'runs'
 
-# ------------------------------------------------- 数据口径（与 Task A 一致，抄自 ../src/config.py）
+# ------------------------------------------------- 数据口径（与 Task A 一致，抄自 ../task_a/src/config.py）
 CIFAR100_DIR = DATA_DIR / 'cifar-100-python'
 NUM_CLASSES = 100
 VAL_SIZE = 5000          # 45k train + 5k val，与 A 的 build_loaders_val 同口径

@@ -34,12 +34,12 @@ data/
 
 # Experiment outputs: keep result metadata (config.json, metrics.csv,
 # summaries) but exclude images and model weights.
-# runs/ is ~2.1 GB, almost entirely *.pt checkpoints and *.png curves.
-runs/**/*.png
-runs/**/*.jpg
-runs/**/*.jpeg
-runs/**/*.svg
-runs/**/*.pdf
+# task_a/runs/ is ~2.1 GB, almost entirely *.pt checkpoints and *.png curves.
+task_a/runs/**/*.png
+task_a/runs/**/*.jpg
+task_a/runs/**/*.jpeg
+task_a/runs/**/*.svg
+task_a/runs/**/*.pdf
 
 # Model weights anywhere (project convention: never commit weights)
 *.pt
@@ -49,9 +49,9 @@ runs/**/*.pdf
 *.onnx
 *.h5
 
-# NOTE: runs/ keeps its small result metadata (config.json, metrics.csv,
-# summaries); its images and weights are excluded above. runs_final/ keeps
-# its small deliverables including curves.png; only its weights are excluded.
+# NOTE: task_a/runs/ keeps its small result metadata (config.json, metrics.csv,
+# summaries); its images and weights are excluded above. task_a/runs_final/
+# keeps its small deliverables including curves.png; only weights are excluded.
 
 # ============================================================
 # Caches & test artifacts

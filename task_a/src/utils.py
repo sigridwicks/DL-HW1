@@ -23,7 +23,7 @@ def save_run(run_name, history, model, config):
     with open(run_dir / "metrics.csv", "w", newline="") as f:
         w = csv.writer(f)
         cols = ["epoch", "train_loss", "train_acc", "test_loss", "test_acc", "epoch_time"]
-        has_ema = "ema_test_acc" in history          # 老 run 没有 EMA 列，照旧写 6 列
+        has_ema = "ema_test_acc" in history          # older runs have no EMA columns; keep the original 6
         if has_ema:
             cols += ["ema_test_loss", "ema_test_acc"]
         w.writerow(cols)

@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 def baseline_cnn(num_classes: int = 100) -> nn.Module:
-    """给定的 baseline 架构"""
+    """Baseline architecture from the assignment."""
     return nn.Sequential(
         nn.Conv2d(3, 256, 5, padding=2), nn.ReLU(),
         nn.Conv2d(256, 256, 5, padding=2), nn.ReLU(),
@@ -14,7 +14,7 @@ def baseline_cnn(num_classes: int = 100) -> nn.Module:
 
 
 def baseline_cnn_bn(num_classes: int = 100) -> nn.Module:
-    """baseline + BatchNorm2d after every Conv (before ReLU). Single change vs baseline_cnn."""
+    """Baseline + BatchNorm2d after every Conv (before ReLU). Single change vs baseline_cnn."""
     return nn.Sequential(
         nn.Conv2d(3, 256, 5, padding=2), nn.BatchNorm2d(256), nn.ReLU(),
         nn.Conv2d(256, 256, 5, padding=2), nn.BatchNorm2d(256), nn.ReLU(),
@@ -27,10 +27,10 @@ def baseline_cnn_bn(num_classes: int = 100) -> nn.Module:
 
 
 def cnn_3x3(num_classes: int = 100) -> nn.Module:
-    """baseline+BN recipe, but every 5x5 Conv is replaced by two 3x3 Conv (task-doc factor 7a).
+    """Replace every 5x5 Conv with two 3x3 Convs (task-doc factor 7a).
 
-    Same receptive field (2x3x3 == 1x5x5), fewer weights (18C^2 vs 25C^2) and one extra ReLU
-    per stage. Starting design for exp_106 - evolve/tune it and write the reasoning yourself.
+    Same receptive field (2x3x3 == 1x5x5), fewer weights (18C^2 vs 25C^2),
+    and one extra ReLU per stage. Starting design for exp_106.
     """
     def conv_bn_relu(cin, cout):
         return [nn.Conv2d(cin, cout, 3, padding=1), nn.BatchNorm2d(cout), nn.ReLU()]
@@ -43,10 +43,11 @@ def cnn_3x3(num_classes: int = 100) -> nn.Module:
 
 
 def cnn_down(num_classes: int = 100) -> nn.Module:
-    """3x3 stack + downsampling (task-doc factor 7a): thin stem, stages at 32/16/8/4 px.
+    """3x3 stack with stride-2 downsampling (task-doc factor 7a).
 
-    Stride-2 downsampling cuts compute ~4x per stage, which buys the extra depth at roughly
-    constant cost; 2x(Conv3x3+BN+ReLU) per stage. Starting design for exp_107 - make it yours.
+    A thin stem followed by stages at 32/16/8/4 px. Downsampling cuts compute
+    roughly 4x per stage, which buys extra depth at similar cost.
+    Each stage uses two (Conv3x3 + BN + ReLU) blocks. Starting design for exp_107.
     """
     def stage(cin, cout, stride):
         return [nn.Conv2d(cin, cout, 3, padding=1, stride=stride), nn.BatchNorm2d(cout), nn.ReLU(),
@@ -64,9 +65,9 @@ def cnn_down(num_classes: int = 100) -> nn.Module:
 
 
 # ---------------------------------------------------------------------------
-# Batch-2 架构候选 (exp_2xx)：下面每个 wrapper 都是 cnn_down 只改一处 —— "单变量"
-# 这条纪律直接写在代码里。这些是**起点实现**，按评分点要求，演化方向与"为什么这样
-# 设计"的论证由你自己写。
+# Batch-2 architecture candidates (exp_2xx): each wrapper changes exactly one
+# thing in cnn_down. These are starting points; the design rationale is part
+# of the report.
 # ---------------------------------------------------------------------------
 
 def _norm(kind: str, channels: int, groups: int = 8) -> nn.Module:
@@ -78,10 +79,9 @@ def _norm(kind: str, channels: int, groups: int = 8) -> nn.Module:
 
 
 def _conv_bn_relu(cin, cout, stride=1, dw_sep=False, norm="bn", groups=8):
-    """一次 Conv3x3(+BN/GN)+ReLU；dw_sep=True 时换成 depthwise 3x3 + pointwise 1x1。
+    """One Conv3x3 (+BN/GN) + ReLU. With dw_sep=True, use depthwise 3x3 + pointwise 1x1.
 
-    写法刻意和 cnn_down 的 stage 一致（卷积默认带 bias、BN 紧跟卷积、ReLU 收尾），
-    这样候选相对底座才真的只差"一个变量"。
+    The layout matches cnn_down's stage so each candidate differs by one variable only.
     """
     if dw_sep:
         return [nn.Conv2d(cin, cin, 3, padding=1, stride=stride, groups=cin),   # depthwise
@@ -93,10 +93,10 @@ def _conv_bn_relu(cin, cout, stride=1, dw_sep=False, norm="bn", groups=8):
 
 
 class ResidualStage(nn.Module):
-    """cnn_down 的 stage（两次 3x3+BN+ReLU）外面加一条恒等捷径。
+    """A cnn_down stage (two 3x3+BN+ReLU blocks) with an identity shortcut.
 
-    y = ReLU( bn2(conv2( ReLU(bn1(conv1(x))) )) + shortcut(x) )
-    形状或通道数变化时，shortcut 用 1x1 卷积投影（stride 跟着走），否则是恒等映射。
+    y = ReLU(bn2(conv2(ReLU(bn1(conv1(x))))) + shortcut(x)).
+    A 1x1 projection is used when the shape or channel count changes.
     """
 
     def __init__(self, cin, cout, stride=1, norm="bn", groups=8):
@@ -119,23 +119,23 @@ class ResidualStage(nn.Module):
 
 def cnn_down_variant(widths=(64, 128, 256, 256), strides=(1, 2, 2, 2), convs_per_stage=2,
                      residual=False, dw_sep=False, norm="bn", num_classes=100):
-    """cnn_down 的可参数化版本 —— batch-2 的架构消融全部由它生成（见下面的 wrapper）。
+    """Parameterized cnn_down used by all batch-2 architecture ablations.
 
-    widths / strides  每个 stage 的输出通道数与步幅（默认 = cnn_down 的 32/16/8/4 px）
-    convs_per_stage   每个 stage 里 Conv3x3 的个数（cnn_down 是 2）
-    residual          每个 stage 包一条残差捷径（通道/尺寸变化处用 1x1 投影）
-    dw_sep            3x3 卷积换成 depthwise + 1x1 pointwise
-    norm              "bn" = BatchNorm2d，"gn" = GroupNorm(8)
+    widths / strides   output channels and stride per stage (defaults match cnn_down)
+    convs_per_stage    number of Conv3x3 blocks per stage (cnn_down uses 2)
+    residual           wrap each stage in a residual block (1x1 projection on shape change)
+    dw_sep             replace 3x3 convs with depthwise + 1x1 pointwise
+    norm               "bn" = BatchNorm2d, "gn" = GroupNorm(8)
     """
-    assert len(widths) == len(strides), "widths 和 strides 要一一对应"
-    assert not (residual and dw_sep), "残差 + depthwise 没做（要的话自己加投影分支）"
+    assert len(widths) == len(strides), "widths and strides must have the same length"
+    assert not (residual and dw_sep), "residual + depthwise is not implemented"
     if residual:
-        assert convs_per_stage % 2 == 0, "残差块是 2 个 3x3 一组，convs_per_stage 要取偶数"
+        assert convs_per_stage % 2 == 0, "a residual block uses two 3x3 convs; convs_per_stage must be even"
 
     layers, cin = [], 3
     for cout, stride in zip(widths, strides):
         if residual:
-            # 每个残差块 = 2 个 3x3，所以 convs_per_stage=2 → 1 块、=4 → 2 块（深度跟着走）
+            # One residual block = two 3x3 convs: convs_per_stage=2 -> 1 block, 4 -> 2 blocks.
             for b in range(convs_per_stage // 2):
                 layers.append(ResidualStage(cin if b == 0 else cout, cout,
                                             stride if b == 0 else 1, norm))
@@ -148,82 +148,73 @@ def cnn_down_variant(widths=(64, 128, 256, 256), strides=(1, 2, 2, 2), convs_per
     return nn.Sequential(*layers)
 
 
-# 七个候选：每个都是 cnn_down + 恰好一个改动（不传参数 = 复现 cnn_down 本身）
+# Seven candidates: each is cnn_down plus exactly one change (no arguments = cnn_down itself).
 def cnn_residual(num_classes: int = 100) -> nn.Module:
-    """exp_201：+ 残差连接，形状完全不变。因素 7b。"""
+    """exp_201: add residual connections, no shape change. Factor 7b."""
     return cnn_down_variant(residual=True, num_classes=num_classes)
 
 
 def cnn_wide(num_classes: int = 100) -> nn.Module:
-    """exp_202：宽度 x2（64/128/256/256 -> 128/256/512/512）。因素 7f。"""
+    """exp_202: width x2 (64/128/256/256 -> 128/256/512/512). Factor 7f."""
     return cnn_down_variant(widths=(128, 256, 512, 512), num_classes=num_classes)
 
 
 def cnn_deep(num_classes: int = 100) -> nn.Module:
-    """exp_203：深度 x2（每个 stage 的 3x3 从 2 个加到 4 个）。因素 7f。"""
+    """exp_203: depth x2 (two -> four 3x3 convs per stage). Factor 7f."""
     return cnn_down_variant(convs_per_stage=4, num_classes=num_classes)
 
 
 def cnn_3stage(num_classes: int = 100) -> nn.Module:
-    """exp_204：去掉 4px 阶段（4 -> 3 个 stage，32/16/8 px）。因素 7d。"""
+    """exp_204: drop the 4px stage (four -> three stages, 32/16/8 px). Factor 7d."""
     return cnn_down_variant(widths=(64, 128, 256), strides=(1, 2, 2), num_classes=num_classes)
 
 
 def cnn_dw(num_classes: int = 100) -> nn.Module:
-    """exp_205：3x3 -> depthwise 可分离，形状不变（参数量大幅下降）。因素 7c。"""
+    """exp_205: replace 3x3 convs with depthwise-separable convs. Factor 7c."""
     return cnn_down_variant(dw_sep=True, num_classes=num_classes)
 
 
 def cnn_dw_wide(num_classes: int = 100) -> nn.Module:
-    """exp_206：depthwise 可分离 + 把省下的参数回投宽度（目标 ≈ 同参数量）。因素 7c。"""
+    """exp_206: depthwise-separable convs plus wider channels (roughly constant params). Factor 7c."""
     return cnn_down_variant(widths=(192, 384, 768, 768), dw_sep=True, num_classes=num_classes)
 
 
 def cnn_groupnorm(num_classes: int = 100) -> nn.Module:
-    """exp_207：BatchNorm -> GroupNorm(8)，通往 Task B（SwitchNorm）的桥。因素 7e。"""
+    """exp_207: BatchNorm -> GroupNorm(8), a bridge to Task B (SwitchNorm). Factor 7e."""
     return cnn_down_variant(norm="gn", num_classes=num_classes)
 
 
 def cnn_deep_residual(num_classes: int = 100) -> nn.Module:
-    """exp_208：深度 x2 + 残差连接（每 stage 两个残差块）。
+    """exp_208: depth x2 + residual connections (two residual blocks per stage).
 
-    单独的"深度 x2"（exp_203）和单独的"残差"（exp_201）都是负结果，这里验证经典假设
-    "残差连接解锁深度"：两者组合起来能不能翻正。因素 7b + 7f。
+    Depth alone (exp_203) and residuals alone (exp_201) were both negative.
+    This tests the classic hypothesis that residuals unlock depth. Factors 7b + 7f.
     """
     return cnn_down_variant(convs_per_stage=4, residual=True, num_classes=num_classes)
 
 
 def cnn_deep_residual_wide(num_classes: int = 100) -> nn.Module:
-    """exp_217：宽度 x2 + 深度 x2 + 残差 —— 把 S1 里两个为正的旋钮叠起来。
+    """exp_217: width x2 + depth x2 + residuals, combining the two positive knobs from S1.
 
-    S1 的结论：宽度是唯一的真杠杆（+3.79），深度单独 -3.11 但"深度 + 残差"翻成 +1.45。
-    这里问的是这两个赢面是否独立可加，还是互相吃掉。参数量 ≈ 2x cnn_wide。
+    S1 found width to be the only strong lever (+3.79); depth alone was -3.11,
+    but depth + residuals turned into +1.45. This asks whether the two wins add.
     """
     return cnn_down_variant(widths=(128, 256, 512, 512), convs_per_stage=4,
                             residual=True, num_classes=num_classes)
 
 
-# --- 容量阶梯（过夜长跑那一批）：宽度轴 1x/2x/3x，深度轴 1/2/3/4 个残差块 -------------
+# --- Capacity ladders: width 1x/2x/3x, depth 1/2/3/4 residual blocks per stage ---
 
 def cnn_deep_residual_d3(num_classes: int = 100) -> nn.Module:
-    """exp_218（深 ×3）：每个 stage 3 个残差块（= 6 个 3×3），宽度保持 64/128/256/256。
-
-    cnn_deep_residual 是 2 块/stage；这里再往上加一档，看"残差解锁深度"能走多远。
-    """
+    """exp_218 (depth x3): three residual blocks per stage (six 3x3 convs)."""
     return cnn_down_variant(convs_per_stage=6, residual=True, num_classes=num_classes)
 
 
 def cnn_deep_residual_d4(num_classes: int = 100) -> nn.Module:
-    """exp_219（深 ×4）：每个 stage 4 个残差块（= 8 个 3×3）。
-
-    深度轴的最后一点（再深就算力吃不消了）。三点连起来就是 depth-vs-val 曲线。
-    """
+    """exp_219 (depth x4): four residual blocks per stage (eight 3x3 convs)."""
     return cnn_down_variant(convs_per_stage=8, residual=True, num_classes=num_classes)
 
 
 def cnn_wide3(num_classes: int = 100) -> nn.Module:
-    """exp_220（宽 ×3）：宽度 192/384/768/768，深度保持 cnn_down 的 2 convs/stage。
-
-    宽度轴的第三点（1x=2.35M / 2x=9.36M / 3x=21M），和深度轴共用同一批 60ep 预算。
-    """
+    """exp_220 (width x3): 192/384/768/768 channels, keeping cnn_down's depth."""
     return cnn_down_variant(widths=(192, 384, 768, 768), num_classes=num_classes)

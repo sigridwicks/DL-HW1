@@ -38,11 +38,12 @@ def build_loaders(batch_size=128, num_workers=0):
 
 def build_train_test_loaders(batch_size=128, num_workers=0, train_tf=None, test_tf=None,
                              monitor_size=2000):
-    """最终重训用：**50k 全量** train + 10k test（和 45k/5k 协议分开，别混）。
+    """Final-retrain protocol: full 50k train + 10k test (separate from 45k/5k).
 
-    第三个返回的 monitor_loader 是 train 集的前 monitor_size 张、**不带增强** ——
-    最终重训没有 held-out val，每个 epoch 只拿它看一眼训练是否正常。
-    **它不是 test**；test 只在训练结束后评估一次。
+    The third returned loader is the first ``monitor_size`` training images without
+    augmentation. It is only a training-health monitor: the final retrain has no
+    held-out validation set. It is not the test set; test is evaluated once after
+    training finishes.
     """
     default_train_tf, default_test_tf = build_transforms()
     train_tf = train_tf if train_tf is not None else default_train_tf
@@ -74,10 +75,11 @@ def build_loaders_val(batch_size=128, num_workers=0, val_size=5000, train_tf=Non
     train_tf / test_tf: optional transform overrides (default: build_transforms()),
     e.g. pass an augmented train_tf for the data-augmentation experiment.
 
-    num_workers > 0 会把取数/增强挪到子进程，和 GPU 计算重叠 —— 实测（2026-10-16，cnn_down + crop/flip，
-    45k/128 batch）：num_workers=0 是 58.9 ms/batch（20.7 s/epoch），num_workers>=2 降到 22.8 ms/batch
-    （8.0 s/epoch），**正好贴住纯 GPU 下限 22.6 ms** —— 也就是数据管线不再是瓶颈。子进程会顺手打开
-    persistent_workers，避免每个 epoch 在 Windows 上重新 spawn（每次 spawn 要几秒）。
+    With num_workers > 0, data loading and augmentation move to worker processes and
+    overlap with GPU compute. Measured 2026-10-16 (cnn_down + crop/flip, 45k, batch 128):
+    num_workers=0 was 58.9 ms/batch (20.7 s/epoch); num_workers>=2 was 22.8 ms/batch
+    (8.0 s/epoch), matching the pure-GPU floor of 22.6 ms. persistent_workers avoids
+    re-spawning workers every epoch on Windows.
     """
     default_train_tf, default_test_tf = build_transforms()
     train_tf = train_tf if train_tf is not None else default_train_tf

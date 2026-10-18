@@ -21,5 +21,6 @@ nothing new is installed for Task B). Data is read **read-only** from `../data/`
 | `runs/` | experiment archives (`config.json`, `metrics.csv`, `curves.png`, `params.npz`) | — |
 | `report/` | report sources (merged with Part A into one PDF) | — |
 
-Part A of this assignment lives in `../src`, `../notebooks`, `../runs`, `../data`;
+Part A of this assignment lives in `../task_a/src`, `../task_a/notebooks`,
+`../task_a/runs`, `../task_a/runs_final`, with shared data in `../data/`;
 `task_b/` never writes to any of them.

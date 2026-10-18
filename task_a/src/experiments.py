@@ -146,7 +146,8 @@ def run_extra(arch, tier, aug="crop+flip", optimizer="Adam", lr="1e-3 + warmup/c
 
 
 def _saved_accs(exp_id, name, seeds):
-    """读回已经落盘的 run 的最终 val acc —— 让跳过的配置也能出现在汇总里。"""
+    """Read back final val accuracy from already saved runs so skipped configs
+    still appear in the summary."""
     accs = []
     for s in seeds:
         f = RUNS_DIR / f"{exp_id}_{name}_s{s}" / "metrics.csv"
@@ -158,17 +159,18 @@ def _saved_accs(exp_id, name, seeds):
 
 def run_batch(batch, loaders=None, batch_size=128, epochs=10, skip_existing=True, device=None,
               ema_decay=0.999):
-    """按顺序跑一批配置，最后打一张一行式汇总表。
+    """Run a list of configurations in order and print a one-line summary table.
 
-    batch 里每一项是一个 dict：
+    Each item in ``batch`` is a dict:
         {"exp": "exp_201", "name": "residual", "model": cnn_residual,
-         "extra": {...},                    # 写进 config.json 的描述字段（arch/lr/aug/tier...）
-         "seeds": (0,), "epochs": 20,       # 省略则用函数参数的默认值（seeds 默认三个种子）
+         "extra": {...},                    # descriptive config.json fields (arch/lr/aug/tier...)
+         "seeds": (0,), "epochs": 20,       # optional; defaults come from the function arguments
          "loaders": (tr, va), "scheduler": warmup_cosine}
-    只有 exp / name / model 是必需的。单项可用 "ema_decay" 覆盖整批的 EMA 设置（None = 关掉）。
+    Only ``exp`` / ``name`` / ``model`` are required. An item may override the
+    batch-level EMA setting with ``"ema_decay"`` (None disables it).
 
-    skip_existing=True 时，某个配置的**全部**种子都已落盘就整项跳过 —— 长批次跑到一半中断，
-    重跑这个 cell 不会把已完成的重做一遍。
+    With ``skip_existing=True``, a configuration whose seeds are all saved is skipped
+    entirely, so an interrupted long batch can resume by rerunning the same cell.
     """
     summary = []
     for item in batch:
@@ -199,7 +201,7 @@ def run_batch(batch, loaders=None, batch_size=128, epochs=10, skip_existing=True
             continue
         val = f"{sum(accs) / len(accs):.4f}"
         if len(accs) > 1:
-            val += f" ± {np.std(accs):.4f}"
+            val += f" +/- {np.std(accs):.4f}"
         print(f"{name:<26}{val:>16}{len(accs):>7}{epochs:>9}")
     print("=" * 58)
     return summary
@@ -208,16 +210,18 @@ def run_batch(batch, loaders=None, batch_size=128, epochs=10, skip_existing=True
 def run_final_retrain(exp_id, name, model_fn, train_loader, test_loader, monitor_loader,
                       extra=None, seeds=DEFAULT_SEEDS, epochs=60, batch_size=128, device=None,
                       tta=True, lr=1e-3):
-    """最终交付：50k 全量重训，test **只测一次**（每个 seed 一次），产物写 ``runs_final/``。
+    """Final delivery: retrain on the full 50k and evaluate test exactly once per seed.
 
-    和 run_batch 的区别：
-      * 没有 held-out val —— 50k 全部参与训练，每 epoch 只在 ``monitor_loader``
-        （train 的一个子集、无增强）上记曲线，**它不是 test**；
-      * test 只在训练结束后评估一次（可选 TTA），结果写进 config.json
-        （test_top1 / test_top5 / test_top1_tta / test_top5_tta）；
-      * 产物写 ``runs_final/``，不混进 ``runs/`` —— ``runs/`` 是 45k/5k 协议的，
-        03_final_analysis 的主表只扫那里。
-    所有 seed 跑完后额外报 3-seed 集成（±TTA），**全部分开报告、不做挑选**。
+    Differences from run_batch:
+      * No held-out validation set: all 50k images are used for training. Each epoch
+        only records a curve on ``monitor_loader`` (a training subset without
+        augmentation); it is not the test set.
+      * Test is evaluated once after training finishes (optional TTA) and the result is
+        written to config.json (test_top1 / test_top5 / test_top1_tta / test_top5_tta).
+      * Artifacts go to ``runs_final/``, not ``runs/``. ``runs/`` follows the 45k/5k
+        protocol, and the master table in 03_final_analysis only scans that directory.
+    After all seeds finish, also report the 3-seed ensemble (+/-TTA), with every number
+    reported separately and no cherry-picking.
     """
     from src.config import RUNS_DIR
     from src.utils import warmup_cosine
@@ -236,7 +240,7 @@ def run_final_retrain(exp_id, name, model_fn, train_loader, test_loader, monitor
         hist = fit(model, train_loader, monitor_loader, criterion, opt, epochs=epochs,
                    device=device, scheduler=sched)
 
-        # ---- test：只在这里评估一次（训练全部结束之后）----
+        # ---- test: evaluated exactly once, after training is complete ----
         _, t1, t5 = evaluate_topk(model, test_loader, criterion, device)
         row = {"seed": s, "test_top1": t1, "test_top5": t5}
         if tta:
@@ -277,7 +281,7 @@ def run_final_retrain(exp_id, name, model_fn, train_loader, test_loader, monitor
             msg += f" | TTA {t1_tta:.4f}/{t5_tta:.4f}"
         print(msg)
 
-    # ---- 3-seed 集成（概率平均；模型都还在显存里）----
+    # ---- 3-seed ensemble (probability average; models are still in memory) ----
     summary = {"seeds": rows}
     if len(models) > 1:
         e1, e5 = ensemble_eval(models, test_loader, device, tta=False)
