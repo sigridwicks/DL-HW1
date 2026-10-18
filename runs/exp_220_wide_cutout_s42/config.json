@@ -1,0 +1,12 @@
+{
+  "exp": "exp_220_wide_cutout",
+  "epochs": 60,
+  "batch": 128,
+  "seed": 42,
+  "eval_set": "val5k",
+  "arch": "down+wide",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip+erase",
+  "tier": "confirm"
+}

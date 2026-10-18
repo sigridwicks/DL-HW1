@@ -1,0 +1,99 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# ============================================================
+# Virtual environments
+# ============================================================
+.venv/
+venv/
+env/
+ENV/
+
+# ============================================================
+# Jupyter
+# ============================================================
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# ============================================================
+# Data & experiment artifacts
+# ============================================================
+# CIFAR-100 raw data (~339 MB, re-downloadable)
+data/
+
+# Experiment outputs: keep result metadata (config.json, metrics.csv,
+# summaries) but exclude images and model weights.
+# runs/ is ~2.1 GB, almost entirely *.pt checkpoints and *.png curves.
+runs/**/*.png
+runs/**/*.jpg
+runs/**/*.jpeg
+runs/**/*.svg
+runs/**/*.pdf
+
+# Model weights anywhere (project convention: never commit weights)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.h5
+
+# NOTE: runs/ keeps its small result metadata (config.json, metrics.csv,
+# summaries); its images and weights are excluded above. runs_final/ keeps
+# its small deliverables including curves.png; only its weights are excluded.
+
+# ============================================================
+# Caches & test artifacts
+# ============================================================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# ============================================================
+# Logs & temporary files
+# ============================================================
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# ============================================================
+# OS / editor junk
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# ============================================================
+# Secrets
+# ============================================================
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ============================================================
+# Claude Code local state
+# ============================================================
+.claude/settings.local.json
+.claude/worktrees/

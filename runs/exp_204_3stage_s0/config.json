@@ -1,0 +1,12 @@
+{
+  "exp": "exp_204_3stage",
+  "epochs": 20,
+  "batch": 128,
+  "seed": 0,
+  "eval_set": "val5k",
+  "arch": "3stage",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip",
+  "tier": "screen"
+}

@@ -1,0 +1,11 @@
+{
+  "exp": "exp_104_lrsched",
+  "epochs": 10,
+  "batch": 128,
+  "seed": 0,
+  "eval_set": "val5k",
+  "arch": "baseline+BN",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "none"
+}

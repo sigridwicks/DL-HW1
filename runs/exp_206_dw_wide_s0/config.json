@@ -1,0 +1,12 @@
+{
+  "exp": "exp_206_dw_wide",
+  "epochs": 20,
+  "batch": 128,
+  "seed": 0,
+  "eval_set": "val5k",
+  "arch": "down+dw+wide",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip",
+  "tier": "screen"
+}

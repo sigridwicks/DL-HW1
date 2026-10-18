@@ -1,0 +1,12 @@
+{
+  "exp": "exp_208_deep_residual_conf",
+  "epochs": 20,
+  "batch": 128,
+  "seed": 123,
+  "eval_set": "val5k",
+  "arch": "down+deep+residual",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip",
+  "tier": "confirm"
+}

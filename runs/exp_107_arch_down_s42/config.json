@@ -1,0 +1,11 @@
+{
+  "exp": "exp_107_arch_down",
+  "epochs": 10,
+  "batch": 128,
+  "seed": 42,
+  "eval_set": "val5k",
+  "arch": "downsampled",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip"
+}

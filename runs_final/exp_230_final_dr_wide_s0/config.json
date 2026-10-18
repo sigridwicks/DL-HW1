@@ -1,0 +1,18 @@
+{
+  "exp": "exp_230_final_dr_wide",
+  "epochs": 60,
+  "batch": 128,
+  "seed": 0,
+  "eval_set": "test10k",
+  "train_set": "train50k",
+  "tta": true,
+  "test_top1": 0.7463,
+  "test_top5": 0.9321,
+  "test_top1_tta": 0.7532,
+  "test_top5_tta": 0.934,
+  "arch": "down+deep+residual+wide",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip",
+  "tier": "final"
+}

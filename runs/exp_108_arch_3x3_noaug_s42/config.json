@@ -1,0 +1,11 @@
+{
+  "exp": "exp_108_arch_3x3_noaug",
+  "epochs": 10,
+  "batch": 128,
+  "seed": 42,
+  "eval_set": "val5k",
+  "arch": "2x3x3 stack",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "none"
+}

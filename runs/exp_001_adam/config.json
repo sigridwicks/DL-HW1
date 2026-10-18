@@ -1,0 +1,10 @@
+{
+  "arch": "baseline",
+  "optimizer": "Adam",
+  "lr": 0.001,
+  "epochs": 10,
+  "batch": 128,
+  "aug": "none",
+  "seed": 42,
+  "vs": "exp_000_baseline (SGD 1e-2)"
+}

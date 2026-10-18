@@ -1,0 +1,12 @@
+{
+  "exp": "exp_200_base_down",
+  "epochs": 20,
+  "batch": 128,
+  "seed": 42,
+  "eval_set": "val5k",
+  "arch": "downsampled",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip",
+  "tier": "anchor"
+}

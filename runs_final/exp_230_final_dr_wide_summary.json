@@ -1,0 +1,29 @@
+{
+  "seeds": [
+    {
+      "seed": 0,
+      "test_top1": 0.7463,
+      "test_top5": 0.9321,
+      "test_top1_tta": 0.7532,
+      "test_top5_tta": 0.934
+    },
+    {
+      "seed": 42,
+      "test_top1": 0.7498,
+      "test_top5": 0.9325,
+      "test_top1_tta": 0.7562,
+      "test_top5_tta": 0.9363
+    },
+    {
+      "seed": 123,
+      "test_top1": 0.7541,
+      "test_top5": 0.9326,
+      "test_top1_tta": 0.7612,
+      "test_top5_tta": 0.934
+    }
+  ],
+  "ensemble_top1": 0.7757,
+  "ensemble_top5": 0.9412,
+  "ensemble_tta_top1": 0.7787,
+  "ensemble_tta_top5": 0.9436
+}

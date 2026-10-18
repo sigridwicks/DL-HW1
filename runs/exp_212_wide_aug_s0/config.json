@@ -1,0 +1,12 @@
+{
+  "exp": "exp_212_wide_aug",
+  "epochs": 60,
+  "batch": 128,
+  "seed": 0,
+  "eval_set": "val5k",
+  "arch": "down+wide",
+  "optimizer": "Adam",
+  "lr": "1e-3 + warmup/cos",
+  "aug": "crop+flip",
+  "tier": "confirm"
+}

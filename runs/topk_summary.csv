@@ -1,0 +1,75 @@
+run,exp,arch,tier,aug,epochs,seed,val_top1,val_top5
+exp_101_baseline_sgd_s0,exp_101_baseline_sgd,baseline,,none,10,0,0.1166,0.3186
+exp_101_baseline_sgd_s123,exp_101_baseline_sgd,baseline,,none,10,123,0.1108,0.3222
+exp_101_baseline_sgd_s42,exp_101_baseline_sgd,baseline,,none,10,42,0.1126,0.3178
+exp_102_adam_s0,exp_102_adam,baseline,,none,10,0,0.2794,0.5774
+exp_102_adam_s123,exp_102_adam,baseline,,none,10,123,0.3452,0.6466
+exp_102_adam_s42,exp_102_adam,baseline,,none,10,42,0.0076,0.0392
+exp_103_bn_s0,exp_103_bn,baseline+BN,,none,10,0,0.4746,0.7756
+exp_103_bn_s123,exp_103_bn,baseline+BN,,none,10,123,0.4702,0.7702
+exp_103_bn_s42,exp_103_bn,baseline+BN,,none,10,42,0.4704,0.764
+exp_104_lrsched_s0,exp_104_lrsched,baseline+BN,,none,10,0,0.542,0.8282
+exp_104_lrsched_s123,exp_104_lrsched,baseline+BN,,none,10,123,0.5398,0.8294
+exp_104_lrsched_s42,exp_104_lrsched,baseline+BN,,none,10,42,0.541,0.8254
+exp_105_aug_s0,exp_105_aug,baseline+BN,,crop+flip,10,0,0.4974,0.7994
+exp_105_aug_s123,exp_105_aug,baseline+BN,,crop+flip,10,123,0.501,0.7968
+exp_105_aug_s42,exp_105_aug,baseline+BN,,crop+flip,10,42,0.4994,0.8034
+exp_106_arch_3x3_s0,exp_106_arch_3x3,2x3x3 stack,,crop+flip,10,0,0.5374,0.8366
+exp_106_arch_3x3_s123,exp_106_arch_3x3,2x3x3 stack,,crop+flip,10,123,0.548,0.8386
+exp_106_arch_3x3_s42,exp_106_arch_3x3,2x3x3 stack,,crop+flip,10,42,0.5422,0.834
+exp_107_arch_down_s0,exp_107_arch_down,downsampled,,crop+flip,10,0,0.6194,0.8784
+exp_107_arch_down_s123,exp_107_arch_down,downsampled,,crop+flip,10,123,0.604,0.8738
+exp_107_arch_down_s42,exp_107_arch_down,downsampled,,crop+flip,10,42,0.6066,0.877
+exp_108_arch_3x3_noaug_s0,exp_108_arch_3x3_noaug,2x3x3 stack,,none,10,0,0.5766,0.8586
+exp_108_arch_3x3_noaug_s123,exp_108_arch_3x3_noaug,2x3x3 stack,,none,10,123,0.5784,0.8602
+exp_108_arch_3x3_noaug_s42,exp_108_arch_3x3_noaug,2x3x3 stack,,none,10,42,0.5808,0.855
+exp_109_arch_down_noaug_s0,exp_109_arch_down_noaug,downsampled,,none,10,0,0.5922,0.857
+exp_109_arch_down_noaug_s123,exp_109_arch_down_noaug,downsampled,,none,10,123,0.5856,0.8536
+exp_109_arch_down_noaug_s42,exp_109_arch_down_noaug,downsampled,,none,10,42,0.601,0.8606
+exp_200_base_down_s0,exp_200_base_down,downsampled,anchor,crop+flip,20,0,0.6866,0.9094
+exp_200_base_down_s123,exp_200_base_down,downsampled,anchor,crop+flip,20,123,0.6752,0.909
+exp_200_base_down_s42,exp_200_base_down,downsampled,anchor,crop+flip,20,42,0.667,0.9058
+exp_201_residual_s0,exp_201_residual,down+residual,screen,crop+flip,20,0,0.674,0.91
+exp_202_wide_conf_s0,exp_202_wide_conf,down+wide,confirm,crop+flip,20,0,0.7038,0.9252
+exp_202_wide_conf_s123,exp_202_wide_conf,down+wide,confirm,crop+flip,20,123,0.704,0.9254
+exp_202_wide_conf_s42,exp_202_wide_conf,down+wide,confirm,crop+flip,20,42,0.7042,0.9214
+exp_202_wide_s0,exp_202_wide,down+wide,screen,crop+flip,20,0,0.7142,0.922
+exp_203_deep_s0,exp_203_deep,down+deep,screen,crop+flip,20,0,0.6452,0.898
+exp_204_3stage_s0,exp_204_3stage,3stage,screen,crop+flip,20,0,0.6312,0.8826
+exp_205_dw_s0,exp_205_dw,down+dw,screen,crop+flip,20,0,0.5458,0.8326
+exp_206_dw_wide_s0,exp_206_dw_wide,down+dw+wide,screen,crop+flip,20,0,0.65,0.9016
+exp_207_groupnorm_s0,exp_207_groupnorm,down+gn,screen,crop+flip,20,0,0.5392,0.8324
+exp_208_deep_residual_conf_s0,exp_208_deep_residual_conf,down+deep+residual,confirm,crop+flip,20,0,0.6982,0.9248
+exp_208_deep_residual_conf_s123,exp_208_deep_residual_conf,down+deep+residual,confirm,crop+flip,20,123,0.69,0.9194
+exp_208_deep_residual_conf_s42,exp_208_deep_residual_conf,down+deep+residual,confirm,crop+flip,20,42,0.6862,0.9234
+exp_208_deep_residual_s0,exp_208_deep_residual,down+deep+residual,screen,crop+flip,20,0,0.6908,0.9198
+exp_211_wide_noaug_s0,exp_211_wide_noaug,down+wide,confirm,none,60,0,0.617,0.8666
+exp_211_wide_noaug_s123,exp_211_wide_noaug,down+wide,confirm,none,60,123,0.615,0.8566
+exp_211_wide_noaug_s42,exp_211_wide_noaug,down+wide,confirm,none,60,42,0.612,0.8536
+exp_212_wide_aug_s0,exp_212_wide_aug,down+wide,confirm,crop+flip,60,0,0.722,0.928
+exp_212_wide_aug_s123,exp_212_wide_aug,down+wide,confirm,crop+flip,60,123,0.7294,0.925
+exp_212_wide_aug_s42,exp_212_wide_aug,down+wide,confirm,crop+flip,60,42,0.723,0.9226
+exp_213_deepres_noaug_s0,exp_213_deepres_noaug,down+deep+residual,confirm,none,60,0,0.5818,0.8434
+exp_213_deepres_noaug_s123,exp_213_deepres_noaug,down+deep+residual,confirm,none,60,123,0.5814,0.8426
+exp_213_deepres_noaug_s42,exp_213_deepres_noaug,down+deep+residual,confirm,none,60,42,0.5806,0.8434
+exp_214_deepres_aug_s0,exp_214_deepres_aug,down+deep+residual,confirm,crop+flip,60,0,0.7148,0.9246
+exp_214_deepres_aug_s123,exp_214_deepres_aug,down+deep+residual,confirm,crop+flip,60,123,0.712,0.9254
+exp_214_deepres_aug_s42,exp_214_deepres_aug,down+deep+residual,confirm,crop+flip,60,42,0.717,0.9178
+exp_216_dr_wide_aug_s0,exp_216_dr_wide_aug,down+deep+residual+wide,confirm,crop+flip,60,0,0.742,0.9298
+exp_216_dr_wide_aug_s123,exp_216_dr_wide_aug,down+deep+residual+wide,confirm,crop+flip,60,123,0.7428,0.929
+exp_216_dr_wide_aug_s42,exp_216_dr_wide_aug,down+deep+residual+wide,confirm,crop+flip,60,42,0.7392,0.9284
+exp_217_dr_d3_aug_s0,exp_217_dr_d3_aug,down+deep3+residual,confirm,crop+flip,60,0,0.72,0.9234
+exp_217_dr_d3_aug_s123,exp_217_dr_d3_aug,down+deep3+residual,confirm,crop+flip,60,123,0.7184,0.9246
+exp_217_dr_d3_aug_s42,exp_217_dr_d3_aug,down+deep3+residual,confirm,crop+flip,60,42,0.721,0.9236
+exp_218_dr_d4_aug_s0,exp_218_dr_d4_aug,down+deep4+residual,confirm,crop+flip,60,0,0.718,0.9214
+exp_218_dr_d4_aug_s123,exp_218_dr_d4_aug,down+deep4+residual,confirm,crop+flip,60,123,0.7228,0.922
+exp_218_dr_d4_aug_s42,exp_218_dr_d4_aug,down+deep4+residual,confirm,crop+flip,60,42,0.719,0.9198
+exp_219_wide3_aug_s0,exp_219_wide3_aug,down+wide3,confirm,crop+flip,60,0,0.7286,0.9248
+exp_219_wide3_aug_s123,exp_219_wide3_aug,down+wide3,confirm,crop+flip,60,123,0.7384,0.926
+exp_219_wide3_aug_s42,exp_219_wide3_aug,down+wide3,confirm,crop+flip,60,42,0.735,0.9314
+exp_220_wide_cutout_s0,exp_220_wide_cutout,down+wide,confirm,crop+flip+erase,60,0,0.7254,0.9284
+exp_220_wide_cutout_s123,exp_220_wide_cutout,down+wide,confirm,crop+flip+erase,60,123,0.7336,0.9298
+exp_220_wide_cutout_s42,exp_220_wide_cutout,down+wide,confirm,crop+flip+erase,60,42,0.7336,0.9294
+exp_221_base_down60_s0,exp_221_base_down60,downsampled,anchor,crop+flip,60,0,0.692,0.9144
+exp_221_base_down60_s123,exp_221_base_down60,downsampled,anchor,crop+flip,60,123,0.6984,0.9084
+exp_221_base_down60_s42,exp_221_base_down60,downsampled,anchor,crop+flip,60,42,0.6916,0.9098

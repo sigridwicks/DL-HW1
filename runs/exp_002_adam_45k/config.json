@@ -1,0 +1,11 @@
+{
+  "arch": "baseline",
+  "optimizer": "Adam",
+  "lr": 0.001,
+  "epochs": 10,
+  "batch": 128,
+  "aug": "none",
+  "seed": 0,
+  "eval_set": "val5k",
+  "note": "control for the 45k val protocol; seed 0 (the seed-42 attempt collapsed to chance)"
+}
