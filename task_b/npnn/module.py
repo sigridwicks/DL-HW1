@@ -112,6 +112,33 @@ class Module:
         return dict(self.named_params())
 
 
+class Flatten(Module):
+    """(N, ...) → (N, prod(...))。接线件，不是评分模块。"""
+
+    PARAM_NAMES = ()
+
+    def forward(self, x):
+        self.shape = x.shape
+        return x.reshape(x.shape[0], -1)
+
+    def backward(self, dout):
+        return dout.reshape(self.shape)
+
+
+class GlobalAvgPool(Module):
+    """(N,C,H,W) → (N,C)：对每个通道在 H、W 上取平均。反向把梯度均摊回每个位置。"""
+
+    PARAM_NAMES = ()
+
+    def forward(self, x):
+        self.shape = x.shape
+        return x.mean(axis=(2, 3))
+
+    def backward(self, dout):
+        n, c, h, w = self.shape
+        return np.broadcast_to(dout[:, :, None, None] / (h * w), self.shape).copy()
+
+
 class Sequential(Module):
     """顺序 forward、逆序 backward。刻意做小（任务书 §0.5：30 行级别）。"""
 

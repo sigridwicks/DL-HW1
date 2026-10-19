@@ -142,6 +142,26 @@ if hasattr(npnn, 'CrossEntropyLoss'):
     ce.backward()
     drilled.append('CrossEntropyLoss')
 
+if hasattr(npnn, 'Adam'):
+    w = rng.standard_normal((2, 3))
+    opt = npnn.Adam([w], 1e-3)
+    opt.step([rng.standard_normal(w.shape)])      # 一步参数更新
+    drilled.append('Adam')
+
+if hasattr(npnn, 'Conv2d'):
+    conv = npnn.Conv2d(2, 3, 3)
+    out = conv.forward(rng.standard_normal((2, 2, 6, 6)))
+    conv.backward(np.ones_like(out))
+    conv.weight -= 0.01 * conv.grads['weight']
+    drilled.append('Conv2d')
+
+if hasattr(npnn, 'SwitchNorm2d'):
+    sn = npnn.SwitchNorm2d(3)
+    out = sn.forward(rng.standard_normal((2, 3, 4, 4)))
+    sn.backward(np.ones_like(out))
+    sn.gamma -= 0.01 * sn.grads['gamma']
+    drilled.append('SwitchNorm2d')
+
 delta = sorted({m.split('.')[0] for m in set(sys.modules) - snapshot})
 print(json.dumps({'drilled': drilled, 'delta': delta}))
 '''

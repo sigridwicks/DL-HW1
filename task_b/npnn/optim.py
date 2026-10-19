@@ -1,18 +1,36 @@
-"""Adam（评分项 1d，5 分）—— Adam(params, lr)；内部超参用 torch 默认：β1=0.9, β2=0.999, ε=1e-8。
+import numpy as np
 
-✍️ TODO
-- [ ] 状态存储：每个参数一份 (m, v)，键要稳定（参数 id 或列表序号）
-- [ ] t 从 1 开始（不是 0），每次 step() 自增，所有参数共享同一个 t
-- [ ] 存档 / 读回：m、v、t 必须能一起 np.save / np.load
-      （不存优化器状态的 checkpoint 是经典陷阱：续跑 = 热重启，loss 会跳）
-- [ ] 不加 weight_decay（题目只要 lr；加了就和 torch.optim.Adam 对不上）
-- [ ] 参数可能是 None / 不存在（bias=False 的层）→ 跳过，别放占位符
+class Adam:
+  def __init__(self, params, lr):
+    self.params = list(params)
+    self.lr = lr
+    self.b1, self.b2, self.eps = 0.9, 0.999, 1e-8
+    self.t = 0
+    self.m = [np.zeros_like(p) for p in self.params]
+    self.v = [np.zeros_like(p) for p in self.params]
 
-四类坑见 §2.4：t 从 0 开始 / ε 放进根号内 / 自作主张加 wd / 遍历到 None 参数。
+  def step(self, grads):
+    self.t += 1
+    for p, g, m, v in zip(self.params, grads, self.m, self.v):
+      if g is None:
+        continue
+      m *= self.b1
+      m += (1.0 - self.b1) * g
+      v *= self.b2
+      v += (1.0 - self.b2) * g * g
+      m_hat = m / (1.0 - self.b1 ** self.t)
+      v_hat = v / (1.0 - self.b2 ** self.t)
+      p -= self.lr * m_hat / (np.sqrt(v_hat) + self.eps) 
 
-自检（§2.4 清单）：逐步轨迹对拍 100 步全程 <1e-7；单参数函数手推前 3 步；
-                  bias=False 的层能训练；状态存读后与不中断完全一致。
-★ 最强证据 =「逐步轨迹对拍」：同初值、同人工梯度，每步比全部参数，画 max|Δθ| vs step。
-  如果从第 k 步开始分叉，第 k 步就是 bug 位置（分叉点定位法）。
-⛔ 只允许 import numpy。
-"""
+  def state_dict(self):
+    state = {'t': np.array(self.t)}
+    for i, (m, v) in enumerate(zip(self.m, self.v)):
+        state[f'm{i}'] = m
+        state[f'v{i}'] = v
+    return state
+
+  def load_state_dict(self, state):
+      self.t = int(state['t'])
+      for i in range(len(self.params)):
+          self.m[i] = np.array(state[f'm{i}'])
+          self.v[i] = np.array(state[f'v{i}'])

@@ -1,0 +1,13 @@
+{
+  "arch": "conv32-sn-gelu / conv64-s2-sn-gelu / conv128-s2-sn-gelu / gap / linear",
+  "epochs": 1,
+  "batch": 128,
+  "lr": 0.001,
+  "seed": 42,
+  "optimizer": "Adam(b1=0.9,b2=0.999,eps=1e-8)",
+  "dtype": "float32",
+  "threads": 4,
+  "n_params": 107268,
+  "train_time_s": 279.21987199998694,
+  "data": "CIFAR-100 45k train / 5k val (split from train)"
+}

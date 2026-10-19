@@ -12,10 +12,14 @@
 """
 
 from .activations import GELU
+from .conv import Conv2d, conv_output_size, conv_param_count
 from .data import CIFAR100, Split, batches, load_label_names, normalize, unnormalize
 from .linear import Linear
 from .losses import CrossEntropyLoss
 from .module import Module, Sequential
+from .norm import SwitchNorm2d
+from .optim import Adam
 
 __all__ = ['CIFAR100', 'Split', 'batches', 'load_label_names', 'normalize', 'unnormalize',
-           'Module', 'Sequential', 'Linear', 'GELU', 'CrossEntropyLoss']
+           'Module', 'Sequential', 'Linear', 'GELU', 'CrossEntropyLoss', 'Adam',
+           'Conv2d', 'conv_output_size', 'conv_param_count', 'SwitchNorm2d']

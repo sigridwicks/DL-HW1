@@ -17,8 +17,11 @@ import sys
 
 # ------------------------------------------------------------------ 路径
 TASKB_ROOT = pathlib.Path(__file__).resolve().parent
-DATA_DIR = TASKB_ROOT.parent / 'data'
+PROJECT_ROOT = TASKB_ROOT.parent
+DATA_DIR = PROJECT_ROOT / 'data'
 RUNS_DIR = TASKB_ROOT / 'runs'
+REPORT_DIR = PROJECT_ROOT / 'report'
+FIG_DIR = REPORT_DIR / 'figs'      # 所有报告图统一落这里（A/B 共用，main.tex 按裸文件名引用）
 
 # ------------------------------------------------- 数据口径（与 Task A 一致，抄自 ../task_a/src/config.py）
 CIFAR100_DIR = DATA_DIR / 'cifar-100-python'

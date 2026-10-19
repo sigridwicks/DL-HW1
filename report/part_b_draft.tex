@@ -1,0 +1,324 @@
+% ======================================================================
+% Part B draft -- drop-in replacement for the skeleton after \clearpage
+% (main.tex line 352 onward). Every number is traceable to task_b/runs/
+% and task_b/tests/. Section B.5 is left as notes for the author.
+% ASCII only (safe for pdflatex without CJK support).
+% ======================================================================
+
+\clearpage
+\section*{Part B: Neural Network from Scratch}
+\setcounter{section}{0}
+\renewcommand{\thesection}{B.\arabic{section}}
+
+This part implements the forward and backward propagation of six network modules in NumPy only,
+and then demonstrates that the implementation is not merely plausible but numerically identical to
+PyTorch. The central claim is deliberately narrow: \emph{every module is verified by at least two
+independent paths}, and the assembled network follows the same optimisation trajectory as the
+reference to machine precision.
+
+% ----------------------------------------------------------------------
+\section{Overview and Constraints}
+\label{sec:partb-overview}
+
+\textbf{Deliverable.} The implementation package \texttt{npnn} provides \texttt{Linear},
+\texttt{GELU} (tanh approximation), \texttt{CrossEntropyLoss}, \texttt{Adam}, \texttt{Conv2d}
+(including im2col and col2im) and \texttt{SwitchNorm2d}, each with an explicit \texttt{forward}
+and \texttt{backward}. The package imports \texttt{numpy} only; PyTorch is used exclusively as a
+reference implementation and never enters the deliverable.
+
+\textbf{Data protocol.} The CIFAR-100 Python pickles are read directly with \texttt{pickle};
+no framework data loader is used. Images are stored as \texttt{uint8} with a channel-first layout,
+which was verified independently: reshaping to $(N,3,32,32)$ yields per-channel means of
+$[0.5071, 0.4865, 0.4409]$, matching the constants computed for Part A. The training set is split
+into 45k training and 5k validation images; the 10k test set is untouched. One detail worth
+recording is that the train and test pickles share exactly the same keys, contrary to a common
+assumption, and that a batch's per-channel mean is \emph{not} exactly zero: with dataset statistics
+it fluctuates with a standard error of roughly $0.055$ per channel, which was measured over a full
+epoch to rule out a silent normalisation bug.
+
+\textbf{Environment.} Python 3.11.14 with numpy 2.4.6 (OpenBLAS), PyTorch 2.11.0 as the reference,
+CPU only. BLAS threads were fixed at four; Section~\ref{sec:partb-training} shows why more threads
+made the bandwidth-bound parts of the network slower, not faster.
+
+% ----------------------------------------------------------------------
+\section{Implementation Discipline}
+\label{sec:partb-discipline}
+
+Three mechanisms keep the implementation honest.
+
+\textbf{Static and dynamic purity guard.} A guard script parses every file in \texttt{npnn/} with
+Python's \texttt{ast} module and asserts that all imports belong to \{numpy $\cup$ standard library
+$\cup$ project-local modules\}. The policy is \emph{default-deny}: an unknown package is a violation
+even if it is not on a blacklist. The scan also follows project-local imports transitively, so a
+helper module cannot smuggle a framework in, and it inspects dynamic import calls
+(\texttt{importlib.import\_module}). A second, dynamic layer imports \texttt{npnn} in a clean
+subprocess, runs a forward pass, a backward pass and one parameter update, and asserts that no
+banned top-level module entered \texttt{sys.modules}. The subprocess is essential: the test suite
+itself imports PyTorch, so an in-process check would be meaningless. The guard is itself validated
+by a negative control that builds a fake package containing \texttt{import torch} and confirms that
+both layers reject it.
+
+\textbf{An independent ruler before the parts.} A central-difference checker was written and
+validated before any module: on $f(x)=\sum x^3$ the analytic gradient $3x^2$ agrees to
+$1.0\times10^{-10}$, and a deliberately wrong gradient is rejected. Sweeping the step size from
+$10^{-2}$ to $10^{-8}$ reproduces the classical U-curve, with truncation error falling as $h^2$,
+rounding error rising as $h$ decreases, and a minimum near $h=10^{-5}$; the $10^{-6}$ acceptance
+threshold used throughout follows from this measurement rather than from convention.
+
+\textbf{Two independent paths per module.} Every module is checked (i) against PyTorch, either a
+corresponding layer or, where none exists, an independent PyTorch-tensor implementation of the same
+equation, and (ii) against finite differences, which share no code with either implementation.
+Checks run in float64; the checker rejects float32 input outright because the $h=10^{-5}$ difference
+would be buried in rounding noise.
+
+% ----------------------------------------------------------------------
+\section{Module Implementations}
+\label{sec:partb-modules}
+
+Throughout, $N$ is the batch size and $C$ the number of channels. Relative errors use
+$\lvert g_{\text{num}}-g_{\text{ana}}\rvert/\max(1,\lvert g_{\text{num}}\rvert+\lvert g_{\text{ana}}\rvert)$.
+
+\subsection{GELU}
+
+The implementation uses the tanh approximation
+\begin{equation}
+\mathrm{GELU}(x) \approx 0.5x\left(1+\tanh u\right), \qquad
+u = \sqrt{\tfrac{2}{\pi}}\left(x + 0.044715x^3\right),
+\end{equation}
+with derivative
+\begin{equation}
+\frac{d}{dx} = 0.5(1+\tanh u) + 0.5x\left(1-\tanh^2 u\right)\sqrt{\tfrac{2}{\pi}}\left(1+3\cdot0.044715x^2\right).
+\end{equation}
+The backward pass uses $1-\tanh^2 u$ rather than $\cosh$, which would overflow for large $\lvert u\rvert$.
+The constant $\sqrt{2/\pi}$ is stored as a Python float: a NumPy scalar would silently promote
+float32 activations to float64. Compared with the exact erf version, the approximation differs by at
+most $4.732\times10^{-4}$ at $x=-2.70$ (relative $5.0\%$), which matches the value predicted for this
+activation; the comparison must use \texttt{approximate='tanh'}, since PyTorch's default GELU is the
+erf variant.
+
+\subsection{Linear}
+
+For $X\in\mathbb{R}^{N\times d_{\text{in}}}$, $W\in\mathbb{R}^{d_{\text{out}}\times d_{\text{in}}}$
+and bias $b$, the forward pass is $Y=XW^{\top}+b$ and
+$dX=dY\,W$, $dW=dY^{\top}X$, $db=\sum_{\text{batch}}dY$. The leading dimensions are flattened before
+the two matrix products; without this the outer-product sum that produces $dW$ is wrong for
+three-dimensional inputs, a failure mode that only appears when such an input is tested. When
+\texttt{bias=False} the parameter table genuinely contains no bias, which is implemented by making
+the parameter list a live view over the layer's attributes rather than a separate dictionary.
+Initialisation reproduces \texttt{kaiming\_uniform} with $a=\sqrt5$: the gain is
+$\sqrt{2/(1+a^2)}=1/\sqrt3$, hence $\mathrm{bound}=\sqrt3\cdot\mathrm{gain}/\sqrt{d_{\text{in}}}=1/\sqrt{d_{\text{in}}}$.
+
+\subsection{Cross-Entropy Loss}
+
+With logits $z$ and integer labels $y$,
+\begin{equation}
+\mathcal{L} = \frac{1}{N}\sum_n\left[\log\sum_c e^{z_{n,c}} - z_{n,y_n}\right], \qquad
+\frac{\partial\mathcal{L}}{\partial z} = \frac{1}{N}\left(\mathrm{softmax}(z)-\mathrm{onehot}(y)\right).
+\end{equation}
+The max subtraction is performed before exponentiation. The effect is visible: on logits of magnitude
+$10^3$ the stable implementation returns a finite loss while the same formula without the subtraction
+returns \texttt{inf}. Reduction is the mean, since the factor $N$ is silently absorbed by Adam's
+adaptive step size and would invalidate every learning-rate comparison. A hand-computed $2\times3$
+example reproduces the loss $0.753109$ exactly and the gradient to $5.6\times10^{-17}$.
+
+\subsection{Adam}
+
+The update follows PyTorch's defaults ($\beta_1=0.9$, $\beta_2=0.999$, $\varepsilon=10^{-8}$):
+\begin{equation}
+m_t=\beta_1 m_{t-1}+(1-\beta_1)g_t,\quad
+v_t=\beta_2 v_{t-1}+(1-\beta_2)g_t^2,\quad
+\theta_t=\theta_{t-1}-\eta\,\frac{m_t/(1-\beta_1^t)}{\sqrt{v_t/(1-\beta_2^t)}+\varepsilon}.
+\end{equation}
+The step counter starts at one, so the first update is approximately $\eta\,\mathrm{sign}(g)$
+regardless of gradient magnitude; starting at zero divides by zero. Epsilon sits \emph{outside} the
+square root. Parameters without gradients are skipped rather than represented by zero arrays, so a
+\texttt{bias=False} layer trains correctly. The strongest evidence is a step-by-step trajectory
+comparison: starting from identical parameters and feeding identical gradients, the two
+implementations differ by at most $2.78\times10^{-17}$ over 100 steps. Saving and restoring
+$(m,v,t)$ reproduces an uninterrupted run bit-for-bit, whereas restoring only the parameters would
+restart the optimiser hot.
+
+\subsection{Conv2d}
+
+The layer defines
+$Y_{n,o,i,j}=b_o+\sum_{c,u,v}W_{o,c,u,v}X_{n,c,iS+u,jS+v}$ with
+$H_{\text{out}}=\lfloor(H+2P-K)/S\rfloor+1$ and parameter count $C_{\text{in}}C_{\text{out}}K^2+C_{\text{out}}$,
+asserted at construction. The task specification omits padding; the reference is therefore PyTorch's
+default of zero, and padding is retained only as an opt-in extension.
+
+Two implementations are kept. A naive version loops over output positions and contracts each patch
+with the filter; it is slow but almost impossible to get wrong, and serves as the oracle. The
+training path uses im2col + GEMM: all patches are unfolded into rows of an
+$(N H_{\text{out}}W_{\text{out}})\times(C_{\text{in}}K^2)$ matrix, so the convolution becomes one
+matrix product. The backward pass is the delicate part. $dW$ is a second matrix product, but $dX$
+requires scattering every window's contribution back to the input, and overlapping windows mean that
+several contributions land on the same pixel. The implementation accumulates with $K^2$ strided slice
+additions rather than assigning, which is both correct and considerably faster than
+\texttt{np.add.at}.
+
+An overlap bug is silent: with $S\ge K$ the windows do not overlap and an assignment-based
+implementation also passes, which is why the test matrix includes $K=3,S=1$. Eight configurations
+were verified (overlap, stride two, pointwise, $K=5$, non-divisible height, $S\ge K$, no bias,
+padding), with forward agreement at $8.9\times10^{-16}$, parameter gradients at
+$3.8\times10^{-15}$, a finite-difference check at $2.9\times10^{-11}$, and bit-identical agreement
+between the naive and vectorised versions. The vectorised forward is $12.8\times$ faster than the
+loop in the measured configuration ($2.4$\,ms versus $0.2$\,ms per batch).
+
+\subsection{SwitchNorm2d}
+
+Three statistics are computed for the same feature map: batch normalisation over $(N,H,W)$,
+instance normalisation over $(H,W)$ and layer normalisation over $(C,H,W)$, with broadcasting shapes
+$(1,C,1,1)$, $(N,C,1,1)$ and $(N,1,1,1)$ respectively. Their means and \emph{biased} variances are
+combined with learnable weights $w=\mathrm{softmax}(\lambda)$:
+\begin{equation}
+\hat\mu=\sum_k w_k\mu_k,\qquad \hat\sigma^2=\sum_k w_k\sigma_k^2,\qquad
+y=\gamma\,\frac{x-\hat\mu}{\sqrt{\hat\sigma^2+\varepsilon}}+\beta .
+\end{equation}
+The normalisation uses the biased variance, matching PyTorch's batch-norm training mode; epsilon is
+added to the variance inside the square root.
+
+The discriminative test sets $\lambda$ to a near one-hot vector, which makes the layer reduce exactly
+to batch norm, instance norm or layer norm. All three degenerate cases agree with the corresponding
+PyTorch module to $8.9\times10^{-16}$, which simultaneously validates the reduction axes, the
+broadcasting, the biased-variance convention and the position of epsilon. The gradient with respect
+to $x$ is obtained by differentiating through the mixed mean and variance and then distributing each
+branch back over its own reduction set; the gradient with respect to $\lambda$ passes through the
+softmax Jacobian $\mathrm{diag}(w)-ww^{\top}$. All four gradients ($x,\gamma,\beta,\lambda$) agree
+with an independent PyTorch implementation to $1.2\times10^{-15}$, and the finite-difference check
+returns $1.3\times10^{-10}$.
+
+\subsection{Module Verification Summary}
+
+\begin{table}[t]
+\centering
+\caption{Verification summary. Forward errors are maximum absolute differences against PyTorch in
+float64; backward errors are maximum relative errors over all parameter gradients; the last column is
+the central-difference check.}
+\label{tab:partb-verification}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Module & Cases & Forward max $\lvert\Delta\rvert$ & Backward max rel.\ err. & Finite differences \\
+\midrule
+Linear           & 4 & $2.2\times10^{-16}$ & $3.4\times10^{-16}$ & $7.9\times10^{-11}$ \\
+GELU             & 3 & $8.9\times10^{-16}$ & $3.7\times10^{-15}$ & $1.6\times10^{-10}$ \\
+CrossEntropyLoss & 3 & $0$                 & $3.5\times10^{-18}$ & $3.2\times10^{-9}$  \\
+Adam             & 4 & ---                 & $2.8\times10^{-17}$ (trajectory) & hand-checked \\
+Conv2d           & 8 & $8.9\times10^{-16}$ & $3.8\times10^{-15}$ & $2.9\times10^{-11}$ \\
+SwitchNorm2d     & 3 & $8.9\times10^{-16}$ & $1.2\times10^{-15}$ & $1.3\times10^{-10}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:partb-verification} collects the results. Every entry is three to seven orders of
+magnitude inside the acceptance thresholds of $10^{-9}$ (forward) and $10^{-6}$ (backward and finite
+differences).
+
+% ----------------------------------------------------------------------
+\section{End-to-End Training and Comparison}
+\label{sec:partb-training}
+
+\subsection{Architecture and Budget}
+
+The network has three convolutional stages, each followed by SwitchNorm2d and GELU:
+$3\!\to\!32$ at stride one, $32\!\to\!64$ at stride two and $64\!\to\!128$ at stride two, then global
+average pooling and a linear layer to 100 classes, for 107{,}268 parameters. The design follows the
+spatial-hierarchy conclusion of Part A: early downsampling and $3\times3$ filters rather than a wide,
+full-resolution first layer.
+
+Before training, a timing baseline measured matrix-multiplication throughput against thread count.
+Throughput rises from 98 to 328 GFLOP/s between one and four threads and then saturates, while the
+bandwidth-bound parts of the network (element-wise activations and the reductions inside
+SwitchNorm2d) became slower at eight and sixteen threads. Four threads were therefore fixed, which
+also leaves the machine usable for other work. The baseline deliberately separated compute from
+memory traffic, and it proved to be a \emph{lower bound} for the convolutional layers: it measured
+the matrix product and a contiguous copy, but not im2col's strided gather or the output transpose.
+Profiling the assembled network located a larger hotspot still: NumPy routes the integer power
+$x^3$ through the generic \texttt{pow} kernel, which cost 57\,ms per GELU forward pass on a
+$128\times32\times30\times30$ tensor. Replacing it with two multiplications reduced the epoch time
+from 320\,s to 255\,s, and the trained network remains bandwidth-bound rather than compute-bound.
+
+\subsection{Whole-Network Numerical Agreement}
+
+The strongest evidence in this part is not the final accuracy but the trajectory. Both
+implementations are generated from a single architecture specification, receive the same initial
+parameters (copied with shape assertions), the same float64 batches and the same Adam
+configuration, and run for 100 steps. The loss difference never exceeds
+$1.78\times10^{-15}$ and no single step exceeds $10^{-10}$; after 100 steps the largest parameter
+difference across all 315{,}212 parameters of this comparison network is $4.0\times10^{-15}$. Since
+PyTorch has no switchable-normalisation layer, the reference computes the same equation with PyTorch
+tensors and autograd, so the agreement is between two independent implementations rather than between
+an implementation and itself.
+
+\subsection{Accuracy and Speed}
+
+The from-scratch network was trained on the full 45k training split for 20 epochs with Adam at
+$10^{-3}$ and batch size 128, reaching 54.4\% training and 42.3\% validation accuracy. The PyTorch
+reference, trained with the identical architecture, data order, optimiser and budget, reaches 53.6\%
+and 42.0\%. The validation curves track each other throughout training (Figure~\ref{fig:partb-accuracy}),
+and the final difference of 0.24 percentage points is within the variation produced by the different
+random initialisations.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{accuracy_comparison.png}
+\caption{Left: validation accuracy of the NumPy implementation and the PyTorch reference under an
+identical budget. Right: training and validation accuracy for both. The small gap is attributable to
+different initial random parameters, not to an implementation difference.}
+\label{fig:partb-accuracy}
+\end{figure}
+
+Runtime differs substantially: 255\,s per epoch for NumPy against 50\,s for PyTorch, a factor of
+$5.1$ (92 minutes against 19 minutes for the whole run). The gap is concentrated in the
+memory-bound operations rather than in the matrix products, where the two libraries call the same
+BLAS; it is the price of expressing im2col, col2im and the three normalisation statistics as
+sequences of NumPy expressions instead of fused kernels. This is the concrete answer to the question
+of why a hand-written wheel is slower than an industrial one.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{sn_weight_evolution.png}
+\caption{Learned switchable-normalisation weights $w=\mathrm{softmax}(\lambda)$, averaged over
+channels, for the three layers. The first layer moves towards instance normalisation, the third
+towards batch normalisation while instance normalisation collapses, and the middle layer stays close
+to uniform.}
+\label{fig:partb-sn}
+\end{figure}
+
+Figure~\ref{fig:partb-sn} shows the behaviour the original paper predicts: the network does not
+choose one normalisation for all depths. The first layer increasingly prefers instance
+normalisation (final weight $0.55$), which is consistent with low-level features needing per-image
+contrast normalisation, while the third layer converges to batch normalisation ($0.67$) and drives
+instance normalisation almost to zero. The middle layer remains close to uniform. This
+depth-dependent pattern is the strongest qualitative result of the part.
+
+% ----------------------------------------------------------------------
+\section{What I Learned from Part B}
+\label{sec:partb-learned}
+
+% DRAFT NOTES -- write this section in your own voice. Each bullet maps to evidence above:
+%
+% 1. Silent bugs are the expensive ones. The col2im accumulation error and the missing max
+%    subtraction in cross-entropy both leave training running and the loss decreasing; only an
+%    independent check (K=3,S=1 finite differences; the inf result on large logits) makes them visible.
+%    This is the implementation-side counterpart of the silent failures encountered in Part A.
+%
+% 2. The ruler comes before the parts. Writing and validating the gradient checker first turned six
+%    modules from "looks right" into "measured right", and made every later bug a localisation
+%    exercise instead of a hunt.
+%
+% 3. Numerical stability is a design decision, not a detail. Max subtraction, 1-tanh^2 instead of
+%    cosh, epsilon outside the square root, biased variance: each is mathematically equivalent to the
+%    naive version and numerically not.
+%
+% 4. Measurement corrects intuition. The timing baseline underestimated the convolution because it
+%    measured only copy plus GEMM; profiling the real network then found that a single integer power
+%    in GELU cost more than a convolutional layer. Both corrections came from measurement, not from
+%    reasoning about the code.
+%
+% 5. Comparison requires one source of truth. The first PyTorch reference accidentally used a
+%    different architecture and produced a misleading 20-point accuracy gap; generating both models
+%    from one specification removed the entire class of error.
+%
+% 6. Honest simplification beats silent omission. Padding is not in the specification, the inference
+%    statistics of switchable normalisation are an approximation, and the training budget is limited;
+%    stating each of these explicitly is part of the result rather than a weakness of it.

@@ -1,0 +1,12 @@
+{
+  "arch": "same NET as tests/l2_parity.py (conv/SN/GELU/conv/SN/GELU/conv/SN/GELU/GAP/linear)",
+  "epochs": 20,
+  "batch": 128,
+  "lr": 0.001,
+  "seed": 42,
+  "optimizer": "torch.optim.Adam",
+  "dtype": "float32",
+  "threads": 4,
+  "torch": "2.11.0+cu128",
+  "train_time_s": 1118.7100072000176
+}
