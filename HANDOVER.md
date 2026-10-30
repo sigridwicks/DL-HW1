@@ -1,29 +1,30 @@
-# HANDOVER — AIR5011 / MDS5122 Assignment 1 · Task A
+# HANDOVER — AIR5011 / MDS5122 Assignment 1 · Task A + B
 
-> 2026-10-18 更新（**实验全部结束，交接给报告阶段**）。历史细节见记忆文件与 `task_a/runs/`，本文件只留当前必要的。
-> **截止 2026-10-21（剩 3 天）；报告尚未动笔 —— 这是唯一的剩余大块工作。**
+> 2026-10-19 更新（**A 与 B 的实验/代码全部结束；Part A 报告已写、Part B 草稿已备**）。历史细节见记忆文件、`task_a/runs/`、`task_b/runs/`，本文件只留当前必要的。
+> **截止 2026-10-21；剩余工作只有「报告收尾 + 提交检查」。**
 > 面向接手此项目的下一个 agent 会话。与用户沟通用**中文**；指代 cell 一律用 **`code #N`（只看代码格、从 1 数）**。
 
 ## ⚠️ 先读这段：当前状态与第一小时
 
-**实验已全部结束，不要再跑新实验。** 最终模型已交付：50k 全量重训、test10k **只评估过一次**（4 种方式事先声明）。
+**两个任务都不要再跑新实验。** Part A 的最终模型已交付（50k 重训、test10k 只测一次）；Part B 的六个模块、整网对拍、端到端训练与 torch 参照**全部完成并验收**（见 **§10**）。
 
-- **冠军配置**：`dr_wide`（20.7M，宽×2 + 深×2 + 残差）+ Adam 1e-3 + warmup/cosine + crop+flip + 60 ep。
-- **Headline（test10k）**：单模型 **75.01 ± 0.32**；3-seed 集成 **77.57**；**集成 + TTA 77.87（top-5 94.36）**。
+- **Part A headline（test10k）**：单模型 **75.01 ± 0.32**；3-seed 集成 **77.57**；**集成 + TTA 77.87（top-5 94.36）**。
+- **Part B headline**：numpy 端到端 val **42.3%** vs torch **42.0%**（Δ 0.24 点）；L2 整网对拍 **1.78e-15**；每个 epoch 慢 **5.1×**。
 - **test 已冻结**：从 2026-10-17 起不再改动模型、不再用 test 做任何选择。再调参就是任务书 3.5 的反面案例。
 
 **下个 agent 的第一小时，按这个顺序：**
-1. 读本文件 §0–§3（10 分钟），再读 `TaskA_任务书.md` 的 3.1–3.5、4.1–4.4。
+1. 读本文件 §0–§3 + **§10（Part B）**（15 分钟），再读 `TaskA_任务书.md` 的 3.1–3.5、4.1–4.4 与 `TaskB_任务书.md` 的 4.1/4.2/4.4。
 2. 读 §9「报告写作地图」——它把报告的每一节对到具体的数字/图/文件。
-3. 和用户确认：报告语言**英文**、用 LaTeX 还是 Word、他手上有没有已经写好的段落。
-4. 从 §5 的剩余工作里挑：**报告 > 提交前检查 > 可选 S3**。不要主动开新实验。
+3. 打开 `report/main.tex`：**Part A 已完整**（摘要 + 7 节）；Part B 目前只是骨架 → 用 `report/part_b_draft.tex` 替换第 352 行 `\clearpage` 之后的全部内容。
+4. 和用户确认两件事：**B.5「What I Learned」由谁写**（草稿里只留了 6 条英文要点）、**PDF 用什么引擎编译**（本机没装 LaTeX）。
+5. 之后的顺序：报告收尾 > 提交前检查。不要主动开新实验。
 
 ## 0. 速览
 
 | 项 | 值 |
 |---|---|
 | 任务 | CIFAR-100：复刻 baseline（10 分）→ 提分实验（20 分，主战场）→ 报告（10 分） |
-| 必读 | `TaskA_任务书.md`（评分点 / 五个实验规则 / 因素清单 / 坑位 / 验收清单）；原文 `Assignment_1.pdf`。Task B 未启动，但 `task_b/` 目录已搭好（docstring-only stubs，无代码） |
+| 必读 | `TaskA_任务书.md`（评分点 / 五个实验规则 / 因素清单 / 坑位 / 验收清单）；`TaskB_任务书.md`（六模块规格 / 对拍协议 / 报告结构）；原文 `Assignment_1.pdf`。**Task B 已完成**（见 §10）：`task_b/npnn/` 是交付实现，`task_b/tests/` 是验证工具 |
 | 解释器 | `.venv\Scripts\python.exe`（3.11.14）；torch 2.11.0+cu128 / torchvision 0.26.0+cu128 |
 | 硬件 | RTX 4060 Laptop 8GB；**快态**下 cnn_down@45k ≈ 25 s/epoch、cnn_wide ≈ 26、20.7M 模型 ≈ 60 |
 | 数据 | `data/cifar-100-python/`（hf-mirror 下载，md5 `eb9058c3a382ffc7106e4002c42a8d85` 已校验） |
@@ -180,6 +181,7 @@
 | 优先级 | 事项 | 说明 |
 |---|---|---|
 | **P0** | **写报告（英文）** | 结构照任务书 4.1，图表照 4.2，提交清单照 4.4。每一节的材料见 **§9 报告写作地图** |
+| **P0** | **Part B 并入报告** | 用 `report/part_b_draft.tex`（324 行，ASCII）替换 `main.tex` 第 352 行起的骨架；`report/figs/` 里 B 的图已就绪（见 §10.3）；**B.5 需要人写**（草稿末尾有 6 条英文要点）。细节见 **§10** |
 | **P1** | 提交前检查 + 打包 | notebook Execute All、清 error 输出、zip 不含 `data/` 与 `*.pt`（详见 §8） |
 | P2（可选） | S3 正则线 | AdamW wd=5e-2（exp_222）/ label smoothing（223）/ Dropout（224），都跑在冠军 20.7M 上 → **~3 h/项**（60ep × 3 seeds）。**Cutout 只有 +0.6，正则化边际收益小 —— 时间不够就整段跳过，不影响已有结论** |
 | P3（可选） | SGD 对照（exp_225） | 任务书因素 4 的完整对照，需重扫 lr；冠军规模下 1 seed × 2 个 lr 点 ≈ **2 h**。**报告里已有 10ep 的 SGD vs Adam（exp_101 vs 102），不做也不算缺项** |
@@ -215,9 +217,9 @@
 **交付物**
 - **PDF 报告单独上传 —— 用英文写**（任务书明确要求；沟通用中文不等于报告用中文）
 - **代码 zip 单独上传**，里面**不要**放报告
-- zip 内容：`task_a/src/` + `task_a/notebooks/`（00/01/02_main_exps_1/02_main_exps_2/03/04）+ `agent.md`/`HANDOVER.md`（可选）
-- **不要打包**：`data/`、任何 `*.pt`（`task_a/runs/` 约 2.4 GB、`task_a/runs_final/` 约 250 MB，绝大部分是权重）
-- 建议打包：`task_a/runs/*/config.json` + `metrics.csv`（体积小、是"每个数字的出处"）
+- zip 内容：`task_a/src/` + `task_a/notebooks/`（00/01/02_main_exps_1/02_main_exps_2/03/04）+ **`task_b/npnn/` + `task_b/notebooks/` + `task_b/tests/` + `task_b/config.py` + `task_b/README.md`** + `agent.md`/`HANDOVER.md`（可选）
+- **不要打包**：`data/`、任何 `*.pt`、**`task_b/runs/*/params.npz`**（`task_a/runs/` 约 2.4 GB、`task_a/runs_final/` 约 250 MB，绝大部分是权重）
+- 建议打包：`task_a/runs/*/config.json` + `metrics.csv`、**`task_b/runs/*/config.json` + `metrics.csv` + `sn_weights.json`**（体积小、是"每个数字的出处"）
 
 **提交前检查**
 - [ ] 每个 notebook 从头 **Execute All** 能跑通（任务书标"极其重要"；长训练 cell 要加开关或排除）
@@ -251,3 +253,78 @@
 - **test 数字只能出现在 §6**（最终模型）；§5 的所有对比都用 45k/5k val，并注明是验证集。
 - 图的 `dpi ≥ 150`、有坐标轴 label / 图例、**黑白打印可区分**（现有图已用实线/虚线 + 不同 marker）。
 - 超参用表格、实验对比"表格 + 图"双重呈现、图表编号并在正文引用。
+
+**Part B 的报告结构不在这张表里** —— 见 §10 与 `report/part_b_draft.tex`（B.1–B.4 已写好，B.5 待写）。
+
+---
+
+## 10. Part B（NumPy 从零实现）— 已完成，只剩并入报告
+
+> 2026-10-19：**Part B 的代码、验证、训练、对比全部完成**。剩下的只有「把草稿并进报告 + 写 B.5 + 编译」。
+
+### 10.1 状态
+
+| 项 | 状态 |
+|---|---|
+| 六个评分模块（1a GELU / 1b Linear / 1c CE / 1d Adam / 1e Conv2d / 1f SwitchNorm2d） | ✅ 实现 + 验收（数值梯度 + torch 对拍 + 边界形状） |
+| 纯度守卫（铁律 2） | ✅ AST 静态 + 干净子进程动态 + 反向验证（fake package 必须被判失败） |
+| L2 整网对拍 | ✅ 100 步 `max|Δloss| = 1.78e-15`（判据 1e-8） |
+| 端到端训练（numpy） | ✅ 20 ep，train 54.4% / val 42.3%，92.4 min |
+| torch 参照（同架构同预算） | ✅ train 53.6% / val 42.0%，18.6 min |
+| 报告 Part B 草稿 | ✅ `report/part_b_draft.tex`（324 行、纯 ASCII、结构已查：括号/环境配平、图存在） |
+| B.5「What I Learned」 | ⬜ **留给人写**（草稿末尾有 6 条英文要点，每条对应上面一处证据） |
+
+### 10.2 关键数字（都可追溯）
+
+| 模块 | 前向 max\|Δ\| | 反向 max rel | 数值梯度 | case 数 |
+|---|---|---|---|---|
+| Linear | 2.2e-16 | 3.4e-16 | 7.9e-11 | 4（含 3/4 维输入、bias=False） |
+| GELU | 8.9e-16 | 3.7e-15 | 1.6e-10 | 3；与 erf 版最大差 **4.732e-4 @ x=−2.70** |
+| CrossEntropyLoss | 0 | 3.5e-18 | 3.2e-9 | 3；不减 max 的版本在 1e3 logits 上得 **inf** |
+| Adam | — | 2.8e-17（100 步轨迹） | 手算前 3 步逐位一致 | 存档续跑逐位一致 |
+| Conv2d | 8.9e-16 | 3.8e-15 | 2.9e-11 | 8；im2col vs 朴素逐位一致；**12.8×** 加速 |
+| SwitchNorm2d | 8.9e-16 | 1.2e-15（x/γ/β/λ） | 1.3e-10 | 3 + 退化测试 BN/IN/LN（≤8.9e-16） |
+
+端到端：numpy **42.3%** vs torch **42.0%**（Δ 0.24 点）；每 epoch **255.4 s vs 49.7 s（5.1×）**。
+SN 学到的分层权重：浅层 **IN 0.55**、深层 **BN 0.67 / IN 0.02** —— 论文主张的直接证据。
+
+### 10.3 产物在哪
+
+- **交付实现**：`task_b/npnn/`（`module/linear/activations/losses/optim/conv/norm/data`，**只许 numpy**）
+- **验证工具**：`task_b/tests/`（`grad_check / test_modules / test_sn_degenerate / test_purity / l2_parity / bench_timing / train_npnn / compare_torch_train / arch`，可 import torch）
+- **运行产物**：`task_b/runs/{cnn_sn, torch_ref, l2, adam, timing, smoke}/`
+- **报告图**（`report/figs/`，A/B 共用，main.tex 按裸文件名引用）：
+  `data_samples` · `h_sweep` · `adam_trajectory` · `l2_parity` · `l2_param_hist` · `train_curves` · `sn_weight_evolution` · `accuracy_comparison`
+- **报告草稿**：`report/part_b_draft.tex`
+- **notebook**：`task_b/notebooks/09–13` —— **五个都能 Execute All**；11 号「已有结果就跳过重训」，
+  13 号只读 `runs/` 的 CSV/JSON
+
+### 10.4 复现/验收命令（在 `task_b/` 下，用项目 `.venv`）
+
+```bash
+../.venv/Scripts/python.exe tests/test_purity.py          # 纯度守卫（含 --selftest）
+../.venv/Scripts/python.exe tests/test_modules.py         # 六模块对拍 + SN + 数值梯度
+../.venv/Scripts/python.exe tests/test_sn_degenerate.py   # SN 退化测试
+../.venv/Scripts/python.exe tests/l2_parity.py            # L2 整网对拍（~12 s，会重写 runs/l2/parity.json）
+../.venv/Scripts/python.exe tests/train_npnn.py --epochs 20 --out cnn_sn   # 重训 ≈90 min —— 提交前别跑
+```
+
+### 10.5 交给下一个 agent 的三件事
+
+1. **合并草稿**：把 `report/part_b_draft.tex` 的正文粘进 `main.tex`，替换第 352 行 `\clearpage`
+   之后的骨架。草稿自带 `\clearpage` 与 `\setcounter{section}{0}` / `\renewcommand{\thesection}`，
+   与骨架重复，注意只留一份。
+2. **写 B.5**：草稿末尾的 6 条英文要点（silent bugs / 先造尺子 / 数值稳定性 / 测量纠正直觉 /
+   单一架构来源 / 诚实标注简化）扩写成第一人称段落。
+3. **编译 + 提交检查**：本机**没有 LaTeX**，由用户编译；确认 `accuracy_comparison.png` 与
+   `sn_weight_evolution.png` 正常显示；再跑一遍 §8 的清单。
+
+### 10.6 Part B 的约束（改代码前必读）
+
+- `npnn/` **只许 import numpy**（含整条 import 链）—— 改完必须跑 `test_purity.py`。
+- `task_b/config.py` 不许 import torch（`npnn/data.py` 会 import 它）。
+- 五个 notebook 的 **cell #1 是逐字相同的 bootstrap**，别改。
+- 训练/对比脚本必须在 `import numpy` **之前**调用 `config.limit_threads()`。
+- **运行期打印与异常消息一律 ASCII**（GBK 控制台会吃掉中文）；注释/docstring 可中文。
+- `report/main.tex` 与 `report/figs/` 和 Part A **共用**；不要动 Part A 的数字与图。
+- 已知坑：`x ** 3` 在 numpy 里走 libm `pow`（GELU 曾因此慢一倍）；架构要只从 `tests/arch.py` 生成。

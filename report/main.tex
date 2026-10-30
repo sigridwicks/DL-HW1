@@ -11,6 +11,7 @@
 \usepackage{microtype}
 \usepackage[hidelinks]{hyperref}
 \usepackage[font=small,labelfont=bf]{caption}
+\captionsetup{labelsep=colon}
 
 \graphicspath{{figs/}}
 \setlength{\parindent}{0pt}
@@ -29,10 +30,12 @@
 \maketitle
 
 \begin{abstract}
-This course-work report presents Part A of a two-part deep-learning project. It studies a complete CIFAR-100 image-classification pipeline, from a deliberately simple convolutional baseline to a custom wide residual network. The accuracy is improved step by step by stabilizing optimization, adding normalization and a warmup--cosine schedule, redesigning the spatial hierarchy, increasing capacity, and training with appropriate augmentation. The main conclusion is that augmentation is budget-dependent and that width plus residual depth is more reliable than depth alone. After retraining on all 50,000 training images, the best result is 77.87\% top-1 accuracy from a three-model ensemble with horizontal-flip test-time augmentation.
+This report presents a two-part deep-learning project on CIFAR-100. Part A studies a complete image-classification pipeline, from a deliberately simple convolutional baseline to a custom wide residual network. Accuracy is improved step by step by stabilizing optimization, adding normalization and a warmup--cosine schedule, redesigning the spatial hierarchy, increasing capacity, and training with augmentation. The main conclusions are that augmentation is budget-dependent and that width plus residual depth is more reliable than depth alone. After retraining on all 50,000 training images, a three-model ensemble with horizontal-flip test-time augmentation reaches 77.87\% top-1 accuracy. Part B implements six network modules from scratch in NumPy and verifies them against PyTorch and finite differences; the assembled network trains to 42.3\% validation accuracy, within 0.24 points of the PyTorch reference.
 \end{abstract}
 
 \section*{Part A: PyTorch Image Classification}
+\setcounter{section}{0}
+\renewcommand{\thesection}{A.\arabic{section}}
 
 \section{Introduction}
 
@@ -65,7 +68,7 @@ GPU, AMP & Final model & 87 & 1,471 \\
 \end{tabular}
 \end{table}
 
-The validation protocol used the same deterministic 45,000/5,000 train/validation split for every controlled experiment. Each reported multi-seed result averages seeds 0, 42, and 123; a single-seed screen is explicitly marked as such. The batch size was 128. The loss was cross-entropy. Unless stated otherwise, the optimizer was Adam \cite{adam} with learning rate $10^{-3}$ and a two-epoch linear warmup followed by cosine decay following the cosine-scheduling idea of \cite{sgdr}. The final retraining used all 50,000 training images and kept the 10,000-image test set untouched until training had finished. The complete settings are collected in Table~\ref{tab:settings}.
+The validation protocol used the same deterministic 45,000/5,000 train/validation split for every controlled experiment. Each reported multi-seed result averages seeds 0, 42, and 123; a single-seed screen is explicitly marked as such. A run that collapses to a constant predictor is kept and reported in the text, and is excluded from the reported mean and standard deviation. The batch size was 128. The loss was cross-entropy. Unless stated otherwise, the optimizer was Adam \cite{adam} with learning rate $10^{-3}$ and a two-epoch linear warmup followed by cosine decay following the cosine-scheduling idea of \cite{sgdr}. The final retraining used all 50,000 training images and kept the 10,000-image test set untouched until training had finished. The complete settings are collected in Table~\ref{tab:settings}.
 
 \begin{table}[htbp]
 \centering
@@ -117,7 +120,7 @@ The reference network keeps the spatial resolution at $32\times32$ through four 
 &\qquad\rightarrow\operatorname{GAP}\rightarrow\operatorname{Linear}(256,100).
 \end{aligned}
 \end{equation}
-All convolutions use padding two. Equation~\ref{eq:baseline} has 4,961,124 trainable parameters. This is a useful reference because it is intentionally simple: it has no normalization, no downsampling, and no skip connections. The main architecture families are summarized in Table~\ref{tab:models}.
+All convolutions use padding two. The network in Eq.~\ref{eq:baseline} has 4,961,124 trainable parameters. This is a useful reference because it is intentionally simple: it has no normalization, no downsampling, and no skip connections. The main architecture families are summarized in Table~\ref{tab:models}.
 
 \begin{table}[htbp]
 \centering
@@ -126,7 +129,7 @@ All convolutions use padding two. Equation~\ref{eq:baseline} has 4,961,124 train
 \small
 \begin{tabularx}{\linewidth}{@{}ZZZZZ@{}}
 \toprule
-Model & Stage widths & Strides & Main block & Parameters (M) \\
+Model & Stage widths & Strides & Structure & Parameters (M) \\
 \midrule
 Reference & $256,256,256,256$ & $1,1,1,1$ & four $5\times5$ convolutions & 4.96 \\
 Downsampled & $64,128,256,256$ & $1,2,2,2$ & two $3\times3$ blocks/stage & 2.35 \\
@@ -137,29 +140,31 @@ Selected & $128,256,512,512$ & $1,2,2,2$ & two residual blocks/stage & 20.70 \\
 
 \subsection{Ten-epoch result}
 
-The baseline was trained for exactly 10 epochs with SGD and learning rate $10^{-2}$. The first row of Table~\ref{tab:short} is the reference. The remaining rows are a staged sequence in which the previous configuration is changed by one main factor at a time. Values are validation top-1 and top-5 accuracy in percent; the uncertainty is the standard deviation across three seeds.
+The baseline was trained for exactly 10 epochs with SGD and learning rate $10^{-2}$. The first row of Table~\ref{tab:short} is the reference. The remaining rows are a staged sequence in which the previous configuration is changed by one main factor at a time. Values are validation top-1 and top-5 accuracy in percent; the uncertainty is the sample standard deviation across the seeds used for each row.
 
 \begin{table}[htbp]
 \centering
-\caption{Short-budget progression on the fixed 45k/5k validation split.}
+\caption{Short-budget progression on the fixed 45k/5k validation split. Uncertainties are sample standard deviations over the seeds used for each row: three seeds, except for Baseline + Adam, whose mean and standard deviation use the two non-collapsed seeds (the third collapsed to 0.76\% top-1 and 3.92\% top-5).}
 \label{tab:short}
 \small
 \begin{tabular}{@{}P{0.46\linewidth}P{0.16\linewidth}P{0.16\linewidth}P{0.16\linewidth}@{}}
 \toprule
 Configuration & Augmentation & Top-1 (\%) & Top-5 (\%) \\
 \midrule
-Baseline + SGD & none & $11.33\pm0.30$ & $31.95\pm0.19$ \\
-Baseline + Adam & none & $21.07\pm17.90$ & $42.11\pm27.15$ \\
-Add BatchNorm & none & $47.17\pm0.25$ & $76.99\pm0.47$ \\
-Add warmup + cosine decay & none & $54.09\pm0.11$ & $82.77\pm0.17$ \\
-Add crop + flip & crop + flip & $49.93\pm0.18$ & $79.99\pm0.27$ \\
-Replace $5\times5$ with stacked $3\times3$ & crop + flip & $54.25\pm0.43$ & $83.64\pm0.19$ \\
-Downsampled $3\times3$ CNN & crop + flip & $61.00\pm0.68$ & $87.64\pm0.19$ \\
+Baseline + SGD & none & $11.33\pm0.30$ & $31.95\pm0.23$ \\
+Baseline + Adam & none & $31.23\pm4.65$ & $61.20\pm4.89$ \\
+Add BatchNorm & none & $47.17\pm0.25$ & $76.99\pm0.58$ \\
+Add warmup + cosine decay & none & $54.09\pm0.11$ & $82.77\pm0.21$ \\
+Add crop + flip & crop + flip & $49.93\pm0.18$ & $79.99\pm0.33$ \\
+Replace $5\times5$ with stacked $3\times3$ & crop + flip & $54.25\pm0.53$ & $83.64\pm0.23$ \\
+Downsampled $3\times3$ CNN & crop + flip & $61.00\pm0.82$ & $87.64\pm0.24$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The baseline curves in Figure~\ref{fig:baseline-curves} show that the ten-epoch model is still under-trained: the final training top-1 accuracy is only about 10\%. Replacing SGD with Adam improves the mean but produces a severe seed-dependent failure. One seed reaches only 0.76\% validation accuracy, while the other two reach 27.94\% and 34.52\%. BatchNorm removes this collapse and reduces the run-to-run spread from 17.90 percentage points to 0.25. The warmup--cosine schedule then gives the best short-budget result before architectural changes are introduced.
+On the official 10,000-image test set, the original full-data run of the same baseline (50,000 training images, seed 42) reaches 11.82\% top-1. Table~\ref{tab:short} instead uses the fixed 45k/5k split so that every controlled comparison shares one held-out set.
+
+The baseline curves in Figure~\ref{fig:baseline-curves} show that the ten-epoch model is still under-trained: the final training top-1 accuracy is only about 10\%. That training value is a running average accumulated while the weights are updated within the epoch, whereas validation is measured after the epoch with the final weights; the two curves are therefore not expected to coincide at the same epoch index. Replacing SGD with Adam raises the mean over the two non-collapsed seeds (27.94\% and 34.52\%) to $31.23\pm4.65$, but it also produces a severe seed-dependent failure: one of the three seeds collapses to 0.76\% validation accuracy and is excluded from that mean. BatchNorm removes this collapse: the same seed reaches 47.04\% instead of 0.76\%, and the seed-to-seed standard deviation falls from 4.65 among the two healthy Adam runs to 0.25 over three BatchNorm seeds. The warmup--cosine schedule then gives the best short-budget result before architectural changes are introduced.
 
 \begin{figure}[htbp]
 \centering
@@ -176,11 +181,13 @@ The main comparisons use three distinct training budgets. The 10-epoch block est
 
 For each comparison I recorded the motivation, changed one primary factor, measured validation accuracy, and retained both positive and negative results. This is particularly important for changes whose effect is smaller than the approximately one-percentage-point noise floor observed between repeated data-loader runs.
 
+The factor set was chosen for depth rather than breadth. Dropout and weight decay (AdamW) are listed as possible regularizers in the brief but were not swept here. The classifier is a single $128\to100$ linear layer after global average pooling, so dropout at that point has little capacity to remove; and a fair AdamW test requires its own decoupled weight-decay scale and learning-rate sweep, because the two interact. Muon, which is designed around matrix-shaped parameters, would need additional treatment for convolutional kernels. The experiments therefore concentrate on normalization, the schedule, augmentation, and architecture, where each change admits a clean single-factor comparison.
+
 \subsection{Normalization, optimization, and spatial structure}
 
 BatchNorm \cite{batchnorm} is the first major stability intervention. Without it, the combination of a high-dimensional input stem and Adam can produce an almost constant predictor for one random seed. With BatchNorm, the same seed reaches 47.04\% instead of 0.76\%. The warmup phase limits the initial update size, while cosine decay provides a smooth reduction of the learning rate after the network has entered a useful region.
 
-The stacked $3\times3$ design has the same nominal receptive field as a $5\times5$ layer because two successive $3\times3$ kernels cover a $5\times5$ neighbourhood. It also introduces an additional nonlinearity and uses fewer weights for equal channel counts. The downsampled model goes further: it begins with 64 channels and uses stages with widths $(64,128,256,256)$ and strides $(1,2,2,2)$. Reducing spatial resolution makes later convolutions substantially cheaper and leaves capacity for more useful feature transformations. In the 10-epoch block, this model reaches 61.00\%, a gain of 6.91 points over the baseline.
+The stacked $3\times3$ design has the same nominal receptive field as a $5\times5$ layer because two successive $3\times3$ kernels cover a $5\times5$ neighbourhood. It also introduces an additional nonlinearity and uses fewer weights for equal channel counts. The downsampled model goes further: it begins with 64 channels and uses stages with widths $(64,128,256,256)$ and strides $(1,2,2,2)$. Reducing spatial resolution makes later convolutions substantially cheaper and leaves capacity for more useful feature transformations. In the 10-epoch block, this model reaches 61.00\%, 6.75 points above the stacked $3\times3$ model trained with the same augmentation.
 
 \subsection{The role of augmentation and training duration}
 
@@ -188,15 +195,15 @@ Crop-and-flip augmentation is not uniformly beneficial at a short budget. At ten
 
 \begin{table}[htbp]
 \centering
-\caption{Effect of the same augmentation under a 60-epoch budget. All entries use three seeds and the 45k/5k validation split.}
+\caption{Effect of the same augmentation under a 60-epoch budget. All entries use three seeds and the 45k/5k validation split; uncertainties are sample standard deviations.}
 \label{tab:aug-long}
 \small
 \begin{tabular}{@{}P{0.31\linewidth}P{0.21\linewidth}P{0.21\linewidth}P{0.15\linewidth}@{}}
 \toprule
 Architecture & No augmentation & Crop + flip & Difference \\
 \midrule
-Wide $\times2$ & $61.47\pm0.21$ & $72.48\pm0.33$ & $+11.01$ \\
-Deep $\times2$ + residual & $58.13\pm0.05$ & $71.46\pm0.20$ & $+13.33$ \\
+Wide $\times2$ & $61.47\pm0.25$ & $72.48\pm0.40$ & $+11.01$ \\
+Deep $\times2$ + residual & $58.13\pm0.06$ & $71.46\pm0.25$ & $+13.33$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -205,22 +212,22 @@ The long-run curves show that the non-augmented wide models reach almost 100\% t
 
 \subsection{Architecture ablations}
 
-The 20-epoch architecture screen is summarized in Table~\ref{tab:architecture-screen}. Every entry uses Adam, warmup--cosine decay, crop-and-flip augmentation, and batch size 128. The anchor is the downsampled CNN. Several changes are intentionally negative: depth alone, depthwise-separable convolution, and GroupNorm all reduce accuracy in this setting. Width is the strongest single variable, while depth becomes useful only after residual connections in the spirit of \cite{resnet} make the deeper optimization problem easier.
+The 20-epoch architecture screen is summarized in Table~\ref{tab:architecture-screen}. Every entry uses Adam, warmup--cosine decay, crop-and-flip augmentation, and batch size 128. The anchor is the downsampled CNN. Several changes are intentionally negative: depth alone, depthwise-separable convolution, and GroupNorm all reduce accuracy in this setting. Width is the strongest single variable, while depth becomes useful only after residual connections in the spirit of \cite{resnet} make the deeper optimization problem easier. The very small uncertainty on the width row is genuine: the three seeds give 70.38, 70.40, and 70.42.
 
 \begin{table}[htbp]
 \centering
-\caption{Architecture screen at 20 epochs. Single-seed screens are marked by $n=1$; the selected width and depth-plus-residual configurations were rechecked with three seeds.}
+\caption{Architecture screen at 20 epochs. The $\pm$ values are sample standard deviations over three seeds; single-seed screens are marked by $n=1$. The selected width and depth-plus-residual configurations were rechecked with three seeds.}
 \label{tab:architecture-screen}
 \small
 \begin{tabular}{@{}P{0.60\linewidth}P{0.18\linewidth}P{0.12\linewidth}@{}}
 \toprule
 Change relative to the downsampled anchor & Validation top-1 (\%) & Seeds \\
 \midrule
-Downsampled anchor & 67.63 & $n=3$ \\
+Downsampled anchor & $67.63\pm0.98$ & $n=3$ \\
 Residual connections only & 67.40 & $n=1$ \\
 Width $\times2$ & $70.40\pm0.02$ & $n=3$ \\
 Depth $\times2$ only & 64.52 & $n=1$ \\
-Depth $\times2$ + residual connections & $69.15\pm0.50$ & $n=3$ \\
+Depth $\times2$ + residual connections & $69.15\pm0.61$ & $n=3$ \\
 Remove the $4\times4$ stage & 63.12 & $n=1$ \\
 Depthwise-separable convolutions & 54.58 & $n=1$ \\
 Depthwise + compensating width & 65.00 & $n=1$ \\
@@ -233,21 +240,21 @@ The capacity comparison was then extended to 60 epochs. The final candidate comb
 
 \begin{table}[htbp]
 \centering
-\caption{Long-budget architecture comparisons at 60 epochs. All entries use crop-and-flip augmentation and three seeds.}
+\caption{Long-budget architecture comparisons at 60 epochs. All entries use crop-and-flip augmentation and three seeds; uncertainties are sample standard deviations.}
 \label{tab:long-architecture}
 \small
 \begin{tabular}{@{}P{0.55\linewidth}P{0.18\linewidth}P{0.19\linewidth}@{}}
 \toprule
 Model & Parameters (M) & Validation top-1 (\%) \\
 \midrule
-Downsampled anchor & 2.35 & $69.40\pm0.31$ \\
-Wide $\times2$ & 9.35 & $72.48\pm0.33$ \\
-Deep $\times2$ + residual & 5.19 & $71.46\pm0.20$ \\
-Deep $\times3$ + residual & 7.93 & $71.98\pm0.11$ \\
-Deep $\times4$ + residual & 10.66 & $71.99\pm0.21$ \\
-Wide $\times3$ & 21.00 & $73.40\pm0.41$ \\
-Wide $\times2$ + deep $\times2$ + residual & 20.70 & $74.13\pm0.15$ \\
-Wide $\times2$ + Cutout & 9.35 & $73.09\pm0.39$ \\
+Downsampled anchor & 2.35 & $69.40\pm0.38$ \\
+Wide $\times2$ & 9.35 & $72.48\pm0.40$ \\
+Deep $\times2$ + residual & 5.19 & $71.46\pm0.25$ \\
+Deep $\times3$ + residual & 7.93 & $71.98\pm0.13$ \\
+Deep $\times4$ + residual & 10.66 & $71.99\pm0.25$ \\
+Wide $\times3$ & 21.00 & $73.40\pm0.50$ \\
+Wide $\times2$ + deep $\times2$ + residual & 20.70 & $74.13\pm0.19$ \\
+Wide $\times2$ + Cutout & 9.35 & $73.09\pm0.47$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -289,15 +296,15 @@ After model selection on the validation protocol, the selected architecture was 
 
 \begin{table}[htbp]
 \centering
-\caption{Final test-set results after full-data retraining.}
+\caption{Final test-set results after full-data retraining. Uncertainties are sample standard deviations over three seeds.}
 \label{tab:final-test}
 \small
-\begin{tabular}{@{}P{0.50\linewidth}P{0.19\linewidth}P{0.19\linewidth}@{}}
+\begin{tabular}{@{}P{0.52\linewidth}P{0.18\linewidth}P{0.18\linewidth}@{}}
 \toprule
 Evaluation & Top-1 (\%) & Top-5 (\%) \\
 \midrule
-Single model, mean $\pm$ std & $75.01\pm0.32$ & $93.24\pm0.03$ \\
-Single model + TTA, mean $\pm$ std & $75.69\pm0.33$ & $93.48\pm0.13$ \\
+Single model, mean $\pm$ std & $75.01\pm0.39$ & $93.24\pm0.03$ \\
+Single model + TTA, mean $\pm$ std & $75.69\pm0.40$ & $93.48\pm0.13$ \\
 Three-model ensemble & 77.57 & 94.12 \\
 Three-model ensemble + TTA & \textbf{77.87} & \textbf{94.36} \\
 \bottomrule
@@ -342,7 +349,7 @@ Figure~\ref{fig:errors} complements the class-level plot with high-confidence mi
 \section{What I Learned from Part A}
 
 \begin{enumerate}
-    \item \textbf{Stability can dominate optimizer choice.} Adam alone improved the mean over SGD but produced a 0.76\% seed. BatchNorm changed that unstable regime into a repeatable 47.17\% result. A large mean without a stability check can therefore be misleading.
+    \item \textbf{Stability can dominate optimizer choice.} Adam alone improved the mean over SGD, but one of three seeds collapsed to 0.76\%; excluding that seed, the two healthy runs average 31.23\%. BatchNorm changed that unstable regime into a repeatable 47.17\% result. A mean reported without a stability check can therefore be misleading.
     \item \textbf{The value of augmentation depends on the training budget.} Crop-and-flip was 4.16 points worse at ten epochs, yet 11.01 and 13.33 points better for the wide and deep-residual models at 60 epochs. The early loss is a regularization delay, not evidence that the transform is intrinsically harmful.
     \item \textbf{Capacity should be spent where the data can use it.} Width produced the strongest single architectural gain. Depth alone reduced accuracy by 3.11 points at 20 epochs, but adding residual connections recovered the loss and produced a positive 1.52-point change in the replicated comparison. The residual path made additional depth trainable rather than automatically useful.
     \item \textbf{Small improvements need replication.} A one-point difference appeared between repeated runs with the same nominal configuration because worker-side augmentation randomness was not controlled by the main-process seed. This made the three-seed confirmations more informative than a single best run and prevented treating sub-point changes as firm conclusions.
@@ -354,33 +361,327 @@ Figure~\ref{fig:errors} complements the class-level plot with high-confidence mi
 \setcounter{section}{0}
 \renewcommand{\thesection}{B.\arabic{section}}
 
-This part is reserved for the NumPy-only implementation and its comparison with the PyTorch reference. The final article will use the following structure so that the implementation, verification, and end-to-end experiment remain separate from Part A.
+This part implements the forward and backward propagation of six network modules with NumPy only,
+then compares each module and the assembled network with independent PyTorch references. The modules
+are checked by at least two independent paths, and the controlled whole-network parity test reaches
+machine-precision agreement.
 
-\section{Overview and Constraints}
+% ----------------------------------------------------------------------
+\section{Overview and Scope}
 \label{sec:partb-overview}
-Dataset protocol, numerical restrictions, and the design of the from-scratch training pipeline.
 
-\section{Implementation Discipline}
+\textbf{Implementation.} The package \texttt{npnn} provides \texttt{Linear}, \texttt{GELU}
+(tanh approximation), \texttt{CrossEntropyLoss}, \texttt{Adam}, \texttt{Conv2d} (including im2col
+and col2im) and \texttt{SwitchNorm2d}, each with an explicit \texttt{forward} and \texttt{backward}.
+Each module is a Python class. The constructors expose the requested configuration fields: feature
+dimensions and bias for \texttt{Linear}, learning rate for \texttt{Adam}, channel counts, kernel,
+stride and bias for \texttt{Conv2d}, and the feature count for \texttt{SwitchNorm2d}. All numerical
+operations use NumPy; PyTorch is used only as a reference and is absent from the package.
+
+\textbf{Data protocol.} The CIFAR-100 Python pickles are read directly with \texttt{pickle};
+no framework data loader is used. Images remain \texttt{uint8} in channel-first layout until a batch
+is formed, then are converted to float32 and normalized with $(x/255-\mu)/\sigma$. The training
+set is split into 45k training and 5k validation images, while the 10k test set remains untouched.
+
+\textbf{Environment.} The implementation used Python 3.11.14 with NumPy 2.4.6 (OpenBLAS). PyTorch 2.11.0 was used only as the reference;
+the PyTorch counterpart ran on CPU only. BLAS threads were fixed at four; Section~\ref{sec:partb-training} shows why more threads
+made the bandwidth-bound parts of the network slower, not faster.
+
+% ----------------------------------------------------------------------
+\section{Verification Strategy}
 \label{sec:partb-discipline}
-Package structure, reproducibility controls, numerical checks, and the separation between the NumPy implementation and the reference implementation.
 
+Three checks were used to make the implementation testable.
+
+\textbf{Static and dynamic purity guard.} A guard script parses every file in \texttt{npnn/} with
+Python's \texttt{ast} module and asserts that all imports belong to \{numpy $\cup$ standard library
+$\cup$ project-local modules\}. The policy is \emph{default-deny}: an unknown package is a violation
+even if it is not on a blacklist. The scan also follows project-local imports transitively, so a
+helper module cannot smuggle a framework in. It also inspects dynamic import calls
+(\texttt{importlib.import\_module}). A second, dynamic layer imports \texttt{npnn} in a clean
+subprocess and runs a forward pass, a backward pass and one parameter update. It then asserts that
+no banned top-level module entered \texttt{sys.modules}. The subprocess is essential: the test suite
+itself imports PyTorch, so an in-process check would be meaningless. The guard is itself validated
+by a negative control that builds a fake package containing \texttt{import torch} and confirms that
+both layers reject it.
+
+\textbf{An independent ruler before the parts.} A central-difference checker was written and
+validated before any module: on $f(x)=\sum x^3$ the analytic gradient $3x^2$ agrees to
+$1.0\times10^{-10}$, and a deliberately wrong gradient is rejected. Sweeping the step size from
+$10^{-2}$ to $10^{-8}$ reproduces the classical U-curve, with truncation error falling as $h^2$,
+rounding error rising as $h$ decreases, and a minimum near $h=10^{-5}$; the $10^{-6}$ relative-error
+threshold used throughout follows from this measurement rather than from convention.
+
+\textbf{Two independent paths per module.} Each differentiable module is checked against PyTorch,
+either through a corresponding layer or an independent tensor implementation of the same equation,
+and against central differences that share no code with the analytic backward pass. Adam has no
+input gradient, so it is checked instead by a 100-step PyTorch trajectory, a scalar hand calculation,
+and a checkpoint round trip. All numerical-gradient checks run in float64; float32 is rejected because
+rounding noise would obscure the $h=10^{-5}$ difference.
+
+% ----------------------------------------------------------------------
 \section{Module Implementations}
 \label{sec:partb-modules}
+
+Throughout, $N$ is the batch size and $C$ the number of channels. Relative errors use
+$\lvert g_{\text{num}}-g_{\text{ana}}\rvert/\max(1,\lvert g_{\text{num}}\rvert+\lvert g_{\text{ana}}\rvert)$.
+
 \subsection{GELU}
+
+The implementation uses the tanh approximation
+\begin{equation}
+\mathrm{GELU}(x) \approx 0.5x\left(1+\tanh u\right), \qquad
+u = \sqrt{\tfrac{2}{\pi}}\left(x + 0.044715x^3\right),
+\end{equation}
+with derivative
+\begin{equation}
+\frac{d}{dx} = 0.5(1+\tanh u) + 0.5x\left(1-\tanh^2 u\right)\sqrt{\tfrac{2}{\pi}}\left(1+3\cdot0.044715x^2\right).
+\end{equation}
+The backward pass uses $1-\tanh^2 u$ rather than $\cosh$, which would overflow for large $\lvert u\rvert$.
+The constant $\sqrt{2/\pi}$ is stored as a Python float: a NumPy scalar would silently promote
+float32 activations to float64. Compared with the exact erf version, the approximation differs by at
+most $4.732\times10^{-4}$ at $x=-2.70$ (relative $5.0\%$), which matches the value predicted for this
+activation; the comparison must use \texttt{approximate='tanh'}, since PyTorch's default GELU is the
+erf variant.
+
 \subsection{Linear}
+
+For $X\in\mathbb{R}^{N\times d_{\text{in}}}$, $W\in\mathbb{R}^{d_{\text{out}}\times d_{\text{in}}}$
+and bias $b$, the forward pass is $Y=XW^{\top}+b$ and
+$dX=dY\,W$, $dW=dY^{\top}X$, $db=\sum_{\text{batch}}dY$. The leading dimensions are flattened before
+the two matrix products; without this the outer-product sum that produces $dW$ is wrong for
+three-dimensional inputs, a failure mode that only appears when such an input is tested. When
+\texttt{bias=False} the parameter table genuinely contains no bias, which is implemented by making
+the parameter list a live view over the layer's attributes rather than a separate dictionary.
+Initialisation reproduces \texttt{kaiming\_uniform} with $a=\sqrt5$: the gain is
+$\sqrt{2/(1+a^2)}=1/\sqrt3$, hence $\mathrm{bound}=\sqrt3\cdot\mathrm{gain}/\sqrt{d_{\text{in}}}=1/\sqrt{d_{\text{in}}}$.
+
 \subsection{Cross-Entropy Loss}
+
+With logits $z$ and integer labels $y$,
+\begin{equation}
+\mathcal{L} = \frac{1}{N}\sum_n\left[\log\sum_c e^{z_{n,c}} - z_{n,y_n}\right], \qquad
+\frac{\partial\mathcal{L}}{\partial z} = \frac{1}{N}\left(\mathrm{softmax}(z)-\mathrm{onehot}(y)\right).
+\end{equation}
+The max subtraction is performed before exponentiation. The effect is visible: on logits of magnitude
+$10^3$ the stable implementation returns a finite loss while the same formula without the subtraction
+returns \texttt{inf}. The reduction is the mean, matching the PyTorch reference. A hand-computed $2\times3$ example
+reproduces the loss $0.753109$ exactly and the gradient to $5.6\times10^{-17}$.
+
 \subsection{Adam}
+
+The update follows PyTorch's defaults ($\beta_1=0.9$, $\beta_2=0.999$, $\varepsilon=10^{-8}$):
+\begin{equation}
+m_t=\beta_1 m_{t-1}+(1-\beta_1)g_t,\quad
+v_t=\beta_2 v_{t-1}+(1-\beta_2)g_t^2,\quad
+\theta_t=\theta_{t-1}-\eta\,\frac{m_t/(1-\beta_1^t)}{\sqrt{v_t/(1-\beta_2^t)}+\varepsilon}.
+\end{equation}
+The step counter starts at one, so the first update is approximately $\eta\,\mathrm{sign}(g)$
+regardless of gradient magnitude; starting at zero divides by zero. Epsilon sits \emph{outside} the
+square root. Parameters without gradients are skipped rather than represented by zero arrays, so a
+\texttt{bias=False} layer trains correctly. The strongest evidence is a step-by-step trajectory
+comparison: starting from identical parameters and feeding identical gradients, the two
+implementations differ by at most $2.78\times10^{-17}$ over 100 steps. Saving and restoring
+$(m,v,t)$ reproduces an uninterrupted run bit-for-bit, whereas restoring only the parameters would
+restart the optimiser hot.
+
 \subsection{Conv2d}
+
+The layer defines
+$Y_{n,o,i,j}=b_o+\sum_{c,u,v}W_{o,c,u,v}X_{n,c,iS+u,jS+v}$ with
+$H_{\text{out}}=\lfloor(H+2P-K)/S\rfloor+1$ and parameter count
+$C_{\text{in}}C_{\text{out}}K^2+\mathbf{1}_{\mathrm{bias}}C_{\text{out}}$,
+asserted at construction. The required constructor exposes no padding argument, so the layer performs no padding; an optional padding argument is retained only for boundary tests.
+
+Two implementations are kept. A naive version loops over output positions and contracts each patch
+with the filter; it is slow but almost impossible to get wrong, and serves as the oracle. The
+training path uses an explicitly written im2col + GEMM implementation rather than a pre-existing
+convolution operator: all patches are unfolded into rows of an
+$(N H_{\text{out}}W_{\text{out}})\times(C_{\text{in}}K^2)$ matrix, so the convolution becomes one
+matrix product. The backward pass is the delicate part. $dW$ is a second matrix product, but $dX$
+requires scattering every window's contribution back to the input, and overlapping windows mean that
+several contributions land on the same pixel. The implementation accumulates with $K^2$ strided slice
+additions rather than assigning, which is both correct and considerably faster than
+\texttt{np.add.at}.
+
+An overlap bug is silent: with $S\ge K$ the windows do not overlap and an assignment-based
+implementation also passes, which is why the test matrix includes $K=3,S=1$. Eight configurations
+were verified (overlap, stride two, pointwise, $K=5$, non-divisible height, $S\ge K$, no bias,
+padding), with forward agreement at $8.9\times10^{-16}$, parameter gradients at
+$3.8\times10^{-15}$, and a finite-difference check at $2.9\times10^{-11}$. The naive and
+vectorised implementations agree within numerical tolerance, while the vectorised forward is about
+$13\times$ faster in the measured configuration.
+
 \subsection{SwitchNorm2d}
+
+Following Switchable Normalization \cite{switchnorm}, three statistics are computed for the same feature map: batch normalisation over $(N,H,W)$,
+instance normalisation over $(H,W)$ and layer normalisation over $(C,H,W)$, with broadcasting shapes
+$(1,C,1,1)$, $(N,C,1,1)$ and $(N,1,1,1)$ respectively. Their means and \emph{biased} variances are
+combined with learnable weights $w=\mathrm{softmax}(\lambda)$:
+\begin{equation}
+\hat\mu=\sum_k w_k\mu_k,\qquad \hat\sigma^2=\sum_k w_k\sigma_k^2,\qquad
+y=\gamma\,\frac{x-\hat\mu}{\sqrt{\hat\sigma^2+\varepsilon}}+\beta .
+\end{equation}
+The normalisation uses the biased variance, matching PyTorch's batch-norm training mode; epsilon is
+added to the variance inside the square root. During training the mixed batch statistics are used and
+running averages of the mixed statistics are maintained for evaluation.
+
+The discriminative test sets $\lambda$ to a near one-hot vector, which makes the layer reduce to
+batch norm, instance norm or layer norm to numerical precision. All three degenerate cases agree with the corresponding
+PyTorch module to $8.9\times10^{-16}$, which simultaneously validates the reduction axes, the
+broadcasting, the biased-variance convention and the position of epsilon. The gradient with respect
+to $x$ is obtained by differentiating through the mixed mean and variance and then distributing each
+branch back over its own reduction set; the gradient with respect to $\lambda$ passes through the
+softmax Jacobian $\mathrm{diag}(w)-ww^{\top}$. All four gradients ($x,\gamma,\beta,\lambda$) agree
+with an independent PyTorch implementation to $1.2\times10^{-15}$, and the finite-difference check
+returns $1.3\times10^{-10}$.
+
 \subsection{Module Verification Summary}
 
+\begin{table}[t]
+\centering
+\caption{Verification summary. Forward errors are maximum absolute differences against PyTorch in
+float64; backward errors are maximum relative errors over all parameter gradients; the last column
+records either a central-difference check or the independent optimizer trajectory check.}
+\label{tab:partb-verification}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Module & Cases & Forward max $\lvert\Delta\rvert$ & Backward max rel.\ err. & Gradient or trajectory check \\
+\midrule
+Linear           & 4 & $2.2\times10^{-16}$ & $3.4\times10^{-16}$ & $7.9\times10^{-11}$ \\
+GELU             & 3 & $8.9\times10^{-16}$ & $3.7\times10^{-15}$ & $1.6\times10^{-10}$ \\
+CrossEntropyLoss & 3 & $0$                 & $3.5\times10^{-18}$ & $3.2\times10^{-9}$  \\
+Adam             & 4 & ---                 & $2.8\times10^{-17}$ (trajectory) & hand-checked \\
+Conv2d           & 8 & $8.9\times10^{-16}$ & $3.8\times10^{-15}$ & $2.9\times10^{-11}$ \\
+SwitchNorm2d     & 3 & $8.9\times10^{-16}$ & $1.2\times10^{-15}$ & $1.3\times10^{-10}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:partb-verification} collects the results. The measured errors are below $10^{-9}$
+for forward comparisons and $10^{-6}$ for backward or finite-difference checks.
+
+% ----------------------------------------------------------------------
 \section{End-to-End Training and Comparison}
 \label{sec:partb-training}
-Network architecture, training curves, numerical agreement with PyTorch, accuracy comparison, and runtime analysis.
 
+\subsection{Architecture and Budget}
+
+The network has three convolutional stages, each followed by SwitchNorm2d and GELU:
+$3\!\to\!32$ at stride one, $32\!\to\!64$ at stride two and $64\!\to\!128$ at stride two, then global
+average pooling and a linear layer to 100 classes, for 107{,}268 parameters. The count is 896 for the first convolution, 18{,}496 and 73{,}856 for the next two, 12{,}900 for the classifier, and 160, 320 and 640 for the three SwitchNorm2d layers; because the switch logits $\lambda$ are stored per channel, each normalization layer contributes $5C$ parameters ($\gamma$, $\beta$ and $3C$ values of $\lambda$). The design uses early downsampling and $3\times3$ filters rather than a wide,
+full-resolution first layer, keeping the hand-written network small enough to train on the CPU.
+
+Before training, a timing baseline measured matrix-multiplication throughput against thread count.
+Throughput rises from 98 to 328 GFLOP/s between one and four threads and then saturates, while the
+bandwidth-bound parts of the network (element-wise activations and the reductions inside
+SwitchNorm2d) became slower at eight and sixteen threads. Four threads were therefore fixed, which
+also leaves the machine usable for other work. The baseline deliberately separated compute from
+memory traffic, and it proved to be a \emph{lower bound} for the convolutional layers: it measured
+the matrix product and a contiguous copy, but not im2col's strided gather or the output transpose.
+Profiling the assembled network located a larger hotspot still: NumPy routes the integer power
+$x^3$ through the generic \texttt{pow} kernel, which cost 57\,ms per GELU forward pass on a
+$128\times32\times30\times30$ tensor. Replacing it with two multiplications reduced the epoch time
+from 320\,s to 255\,s, and the trained network remains bandwidth-bound rather than compute-bound.
+
+\subsection{Whole-Network Numerical Agreement}
+
+The strongest evidence in this part is not the final accuracy but the trajectory. The parity test
+uses a separate network from the 107{,}268-parameter training network: $3\!\to\!8$ and $8\!\to\!16$
+convolutions, a flatten, and a $3136\!\to\!100$ linear layer, for 315{,}212 parameters (most of them in the classifier). Both
+implementations are generated from a single architecture specification, receive the same initial
+parameters (copied with shape assertions), the same float64 batches and the same Adam
+configuration, and run for 100 steps. The loss difference never exceeds
+$1.78\times10^{-15}$, and the largest parameter deviation at any step is
+$5.85\times10^{-15}$ ($5.76\times10^{-15}$ at step 100). Since
+PyTorch has no switchable-normalisation layer, the reference computes the same equation with PyTorch
+tensors and autograd, so the agreement is between two independent implementations rather than between
+an implementation and itself.
+
+\subsection{Accuracy and Speed}
+
+The from-scratch network was trained on the full 45k training split for 20 epochs with Adam at
+$10^{-3}$ and batch size 128, reaching 54.38\% on a 5{,}000-image training monitor and 42.28\%
+validation accuracy. The PyTorch reference, trained with the identical architecture, data order,
+optimiser and budget, reaches 53.60\% and 42.04\% on the same monitor and validation sets. The validation curves track each other throughout training (Figure~\ref{fig:partb-accuracy}).
+The final difference is 0.24 percentage points; this supports similar training behaviour, while the
+independent initializations and normalization-state choices prevent a claim of identical trajectories.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{accuracy_comparison.png}
+\caption{Left: validation accuracy of the NumPy implementation and the PyTorch reference under an
+identical budget. Right: training and validation accuracy for both. The curves remain close; the displayed gap includes the independent initializations and the
+normalization-state choices.}
+\label{fig:partb-accuracy}
+\end{figure}
+
+Runtime differs substantially. Training alone took about 255\,s per epoch in NumPy against 49.7\,s in
+PyTorch, a factor of $5.1$; including the two post-epoch evaluation passes, the full 20-epoch runs
+took 92 minutes against 18.6 minutes, a factor of $4.95$. The gap is concentrated in the
+memory-bound operations rather than in the matrix products, where the two libraries call the same
+BLAS; it is the price of expressing im2col, col2im and the three normalisation statistics as
+sequences of NumPy expressions instead of fused kernels. This is the concrete answer to the question
+of why a hand-written wheel is slower than an industrial one.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.96\linewidth]{sn_weight_evolution.png}
+\caption{Learned switchable-normalisation weights $w=\mathrm{softmax}(\lambda)$, averaged over
+channels, for the three layers. The first layer moves towards instance normalisation, the third
+towards batch normalisation while instance normalisation collapses, and the middle layer stays close
+to uniform.}
+\label{fig:partb-sn}
+\end{figure}
+
+Figure~\ref{fig:partb-sn} shows the depth-dependent behaviour described by the Switchable
+Normalization formulation \cite{switchnorm}: the network does not
+choose one normalisation for all depths. The first layer increasingly prefers instance
+normalisation (final weight $0.55$), which is consistent with low-level features needing per-image
+contrast normalisation, while the third layer converges to batch normalisation ($0.67$) and drives
+instance normalisation almost to zero. The middle layer remains close to uniform. This
+depth-dependent pattern is the strongest qualitative result of the part.
+
+% ----------------------------------------------------------------------
 \section{What I Learned from Part B}
 \label{sec:partb-learned}
-Evidence-based conclusions from the manual forward and backward implementations.
+
+
+\textbf{Silent bugs are the expensive ones.} A convolution can appear to train while a wrong
+col2im update silently loses the contributions from overlapping windows; the error is exposed only by
+the $K=3,S=1$ case and an independent numerical-gradient check. Likewise, cross-entropy without
+max subtraction gives an infinite loss for logits of size $10^3$. These checks showed me that a
+plausible training curve is not enough evidence for a low-level implementation.
+
+\textbf{A numerical ruler should come first.} Writing and validating the central-difference checker
+before the six modules changed the debugging process. Once the checker had a known answer and a
+negative control, each later failure could be localized to one forward or backward equation instead
+of being diagnosed from end-to-end accuracy.
+
+\textbf{Numerical stability is part of the algorithm.} Max subtraction in cross-entropy,
+$1-\tanh^2(u)$ in GELU, the position of $\varepsilon$ in normalization, and the use of biased
+variances all preserve the intended mathematics while changing the finite-precision behavior. The
+float64 checks made these choices observable rather than leaving them as implementation details.
+
+\textbf{Measurement corrected my intuition.} A preliminary timing test measured only a matrix
+multiplication and a copy, so it underestimated the cost of a real convolution. Profiling the full
+network then showed that the cubic term in GELU was a major hotspot; replacing $x^3$ with two
+multiplications reduced the epoch time from roughly 320 seconds to roughly 255 seconds. The useful
+optimization came from measuring the implementation, not from guessing which line looked expensive.
+
+\textbf{A shared model definition makes a comparison meaningful.} The NumPy and PyTorch training
+runs are generated from the same architecture specification, use the same split, data order,
+optimizer and 20-epoch budget, and reach 42.28\% and 42.04\% validation accuracy. The 0.24-point gap
+is small enough to support the conclusion that the manually implemented modules reproduce the
+reference training behaviour, while the independent initializations and normalization-state choices
+mean that it should not be read as a bit-for-bit training comparison.
+
+\textbf{Explicit scope is part of an honest result.} The required convolution interface fixes padding
+at zero, with padding available only as a separately tested extension. SwitchNorm2d keeps
+running averages of its mixed statistics for inference, which is a practical approximation because
+instance and layer statistics depend on each input. Finally, the 20-epoch experiment answers whether
+the NumPy implementation can train the network and match a PyTorch counterpart; it is not a claim
+about the best possible CIFAR-100 accuracy. Recording these choices makes the result reproducible.
 
 \section*{References}
 
@@ -402,6 +703,10 @@ I. Loshchilov and F. Hutter, ``SGDR: Stochastic Gradient Descent with Warm Resta
 
 \bibitem{pytorch}
 A. Paszke et al., ``PyTorch: An Imperative Style, High-Performance Deep Learning Library,'' in \emph{Advances in Neural Information Processing Systems}, 2019.
+
+\bibitem{switchnorm}
+P. Luo, R. Zhang, J. Ren, Z. Peng, and J. Li, ``Switchable Normalization for Learning-to-Normalize Deep Representation,'' arXiv:1907.10473, 2019.
+
 \end{thebibliography}
 
 \end{document}
